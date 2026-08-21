@@ -14,7 +14,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
   - Install `@supabase/supabase-js` and `@supabase/ssr`.
   - Create `.env.local` template (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GEMINI_API_KEY`).
   - Set up browser and server Supabase client utilities in `@/lib/supabase/`.
-- [ ] **Task 1.3: Database Migration (SQL Schema)**
+- [x] **Task 1.3: Database Migration (SQL Schema)**
   - Execute SQL migration in Supabase for tables: `jobs`, `candidates`, `document_checklists`, `scorecard_templates`, `evaluations`, and `activity_logs`.
   - Add database indexes for global search (Name, Email, Skills, Status) and PostgreSQL stored procedures for compliance verification.
 
