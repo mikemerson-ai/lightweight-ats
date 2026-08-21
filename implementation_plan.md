@@ -32,7 +32,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ---
 
 ## Phase 3: Drag-and-Drop Kanban Pipeline UI & Compliance Guardrails
-- [ ] **Task 3.1: Install & Set Up `@dnd-kit`**
+- [x] **Task 3.1: Install & Set Up `@dnd-kit`**
   - Install `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities`.
   - Create Client-side wrapper to prevent Next.js SSR hydration mismatches.
 - [ ] **Task 3.2: Kanban Components & Source Badge Rendering**
