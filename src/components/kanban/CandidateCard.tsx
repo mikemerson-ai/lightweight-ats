@@ -49,8 +49,10 @@ export function daysInStage(candidate: Candidate, now = Date.now()): number {
 
 export function CandidateCard({
   candidate,
+  onSelect,
 }: {
   candidate: Candidate;
+  onSelect?: (candidate: Candidate) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: candidate.id });
@@ -67,8 +69,9 @@ export function CandidateCard({
       }}
       {...attributes}
       {...listeners}
+      onClick={() => !isDragging && onSelect?.(candidate)}
       className={[
-        "rounded-lg border bg-white p-3 shadow-sm",
+        "rounded-lg border bg-white p-3 shadow-sm cursor-pointer",
         isDragging ? "ring-2 ring-secondary" : "cursor-grab active:cursor-grabbing",
       ].join(" ")}
     >

@@ -12,6 +12,7 @@ import { DndContextWrapper } from "./DndContextWrapper";
 import { KanbanColumn } from "./KanbanColumn";
 import { DisqualificationModal } from "./DisqualificationModal";
 import { ComplianceAlertModal } from "./ComplianceAlertModal";
+import { CandidateDetailDrawer } from "@/components/candidates/CandidateDetailDrawer";
 
 export interface PipelineStage {
   key: string;
@@ -61,6 +62,8 @@ export function KanbanBoard({
 
   const [complianceModalOpen, setComplianceModalOpen] = useState(false);
   const [missingComplianceItems, setMissingComplianceItems] = useState<string[]>([]);
+
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
   useEffect(() => {
     if (!jobId) {
@@ -231,6 +234,7 @@ export function KanbanBoard({
                 title={stage.title}
                 accent={stage.accent}
                 candidates={grouped[stage.key] ?? []}
+                onSelect={setSelectedCandidate}
               />
             ))}
           </div>
@@ -251,6 +255,11 @@ export function KanbanBoard({
         isOpen={complianceModalOpen}
         onClose={() => setComplianceModalOpen(false)}
         missingItems={missingComplianceItems}
+      />
+
+      <CandidateDetailDrawer
+        candidate={selectedCandidate}
+        onClose={() => setSelectedCandidate(null)}
       />
     </>
   );

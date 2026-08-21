@@ -21,6 +21,9 @@ export interface QuickAddSourcedCandidateInput {
   email?: string;
   phone?: string;
   primary_skills?: string;
+  years_of_experience?: number | null;
+  ai_summary?: string | null;
+  suggested_role_fit?: string | null;
   outreach_notes?: string;
 }
 
@@ -38,9 +41,65 @@ export interface Candidate {
   source_channel: string;
   source_type: string;
   pending_resume: boolean;
+  years_of_experience?: number | null;
+  ai_summary?: string | null;
+  suggested_role_fit?: string | null;
   created_at: string;
   updated_at: string;
   jobs: { title: string } | null;
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  candidate_id: string;
+  activity_type: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ComplianceDocument {
+  id: string;
+  candidate_id: string;
+  category: string;
+  item_name: string;
+  status: string;
+  issued_date?: string | null;
+  expires_at?: string | null;
+}
+
+export async function getCandidateActivity(
+  candidateId: string,
+): Promise<ActivityLogEntry[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("activity_logs")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as ActivityLogEntry[]) ?? [];
+}
+
+export async function getCandidateDocuments(
+  candidateId: string,
+): Promise<ComplianceDocument[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("document_checklists")
+    .select("*")
+    .eq("candidate_id", candidateId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as ComplianceDocument[]) ?? [];
 }
 
 export async function searchCandidates(query: string): Promise<Candidate[]> {
@@ -84,6 +143,9 @@ export async function quickAddSourcedCandidate(
       email: data.email,
       phone: data.phone,
       primary_skills: data.primary_skills,
+      years_of_experience: data.years_of_experience,
+      ai_summary: data.ai_summary,
+      suggested_role_fit: data.suggested_role_fit,
       pending_resume: true,
     })
     .select("*, jobs(title)")

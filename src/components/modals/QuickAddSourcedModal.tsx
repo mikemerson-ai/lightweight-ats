@@ -26,6 +26,9 @@ export function QuickAddSourcedModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [primarySkills, setPrimarySkills] = useState("");
+  const [yearsOfExperience, setYearsOfExperience] = useState("");
+  const [aiSummary, setAiSummary] = useState("");
+  const [suggestedRoleFit, setSuggestedRoleFit] = useState("");
   const [outreachNotes, setOutreachNotes] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [resume, setResume] = useState<File | null>(null);
@@ -61,6 +64,9 @@ export function QuickAddSourcedModal({
     setEmail("");
     setPhone("");
     setPrimarySkills("");
+    setYearsOfExperience("");
+    setAiSummary("");
+    setSuggestedRoleFit("");
     setOutreachNotes("");
     setResume(null);
     setDragging(false);
@@ -77,10 +83,15 @@ export function QuickAddSourcedModal({
       setPrimarySkills(data.primarySkills.join(", "));
     }
     const summary = data.summary ?? "";
-    const roleFit = data.suggestedRoleFit
-      ? `Suggested Role Fit: ${data.suggestedRoleFit}`
-      : "";
-    const notes = [summary, roleFit].filter(Boolean).join("\n\n");
+    if (summary) setAiSummary(summary);
+    const roleFit = data.suggestedRoleFit ?? "";
+    if (roleFit) setSuggestedRoleFit(roleFit);
+    if (typeof data.yearsOfExperience === "number") {
+      setYearsOfExperience(String(data.yearsOfExperience));
+    }
+    const notes = [summary, roleFit ? `Suggested Role Fit: ${roleFit}` : ""]
+      .filter(Boolean)
+      .join("\n\n");
     if (notes) setOutreachNotes(notes);
   }
 
@@ -131,6 +142,11 @@ export function QuickAddSourcedModal({
         email: email,
         phone: phone,
         primary_skills: primarySkills,
+        years_of_experience: yearsOfExperience
+          ? Number(yearsOfExperience)
+          : null,
+        ai_summary: aiSummary,
+        suggested_role_fit: suggestedRoleFit,
         outreach_notes: outreachNotes,
       });
       reset();

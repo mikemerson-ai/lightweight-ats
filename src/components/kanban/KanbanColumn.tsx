@@ -11,6 +11,7 @@ export interface KanbanColumnProps {
   accent: string;
   isOverlay?: boolean;
   candidates: Candidate[];
+  onSelect?: (candidate: Candidate) => void;
 }
 
 export function KanbanColumn({
@@ -19,6 +20,7 @@ export function KanbanColumn({
   accent,
   isOverlay = false,
   candidates,
+  onSelect,
 }: KanbanColumnProps) {
   const {
     setNodeRef,
@@ -59,7 +61,11 @@ export function KanbanColumn({
       <div className="flex flex-col gap-2.5 px-3 py-3">
         {candidates.length > 0 ? (
           candidates.map((candidate) => (
-            <CandidateCard key={candidate.id} candidate={candidate} />
+            <CandidateCard
+              key={candidate.id}
+              candidate={candidate}
+              onSelect={onSelect}
+            />
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-400">

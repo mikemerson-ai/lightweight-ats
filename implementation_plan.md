@@ -53,6 +53,12 @@ This implementation plan breaks down the development of the Lightweight ATS into
   - Add interactive drag-and-drop upload zone to `QuickAddSourcedModal.tsx` accepting PDF, DOCX, and TXT files.
   - Integrate `parseResumeAction` (Gemini 2.5 Flash) with a loading spinner and 'AI Parsing with Gemini 2.5 Flash...' status.
   - Auto-populate Full Name (First/Last), Email, Phone, Primary Skills, and Recruiter Outreach Notes (summary + suggested role fit) with full manual override before submit.
+- [x] **Task 4.3: Candidate Profile Drawer & AI Fit Summary**
+  - Build `CandidateDetailDrawer.tsx` opened by clicking any `CandidateCard` on the Kanban board.
+  - Header with candidate name, applied role, source badge, current stage, and email/phone contact info.
+  - AI Fit Summary card rendering Gemini-generated bio summary, primary skills tags, years of experience, and suggested role fit.
+  - Compliance Checklist tab with required status badges, and Activity Timeline tab reading `activity_logs`.
+  - Thread `onSelect` through `KanbanColumn`/`KanbanCard` state so clicking a card slides the drawer open.
 
 ---
 
