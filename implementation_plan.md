@@ -10,7 +10,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
   - Install core UI packages (`lucide-react`, `clsx`, `tailwind-merge`, `recharts`).
   - Configure Tailwind with Reliance brand colors (Navy `#0F2C59`, Teal `#0EA5E9`, Amber `#F59E0B`, Slate `#F8FAFC`).
   - Configure `.antigravityignore` and `.geminiignore` in the project root.
-- [ ] **Task 1.2: Supabase Client & Environment Variables**
+- [x] **Task 1.2: Supabase Client & Environment Variables**
   - Install `@supabase/supabase-js` and `@supabase/ssr`.
   - Create `.env.local` template (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GEMINI_API_KEY`).
   - Set up browser and server Supabase client utilities in `@/lib/supabase/`.
