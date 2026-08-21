@@ -121,15 +121,40 @@ export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
 export async function updateCandidateStage(
   candidateId: string,
   stage: string,
+  disqualificationReason?: string,
 ): Promise<void> {
   const supabase = await createClient();
 
+  const updateData: any = { current_stage: stage };
+  if (disqualificationReason) {
+    updateData.disqualification_reason = disqualificationReason;
+  }
+
   const { error } = await supabase
     .from("candidates")
-    .update({ current_stage: stage })
+    .update(updateData)
     .eq("id", candidateId);
 
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function checkCandidateCompliance(
+  candidateId: string,
+): Promise<{ compliant: boolean; missing_items?: string[] }> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("check_candidate_compliance_status", {
+    candidate_uuid: candidateId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    compliant: data?.compliant ?? false,
+    missing_items: data?.missing_items ?? [],
+  };
 }

@@ -5,10 +5,13 @@ import { type DragEndEvent } from "@dnd-kit/core";
 import {
   getCandidatesByJob,
   updateCandidateStage,
+  checkCandidateCompliance,
   type Candidate,
 } from "@/app/actions/candidates";
 import { DndContextWrapper } from "./DndContextWrapper";
 import { KanbanColumn } from "./KanbanColumn";
+import { DisqualificationModal } from "./DisqualificationModal";
+import { ComplianceAlertModal } from "./ComplianceAlertModal";
 
 export interface PipelineStage {
   key: string;
@@ -52,6 +55,12 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loadedJobId, setLoadedJobId] = useState<string | null>(null);
+
+  const [disqualifyModalOpen, setDisqualifyModalOpen] = useState(false);
+  const [candidateToDisqualify, setCandidateToDisqualify] = useState<Candidate | null>(null);
+
+  const [complianceModalOpen, setComplianceModalOpen] = useState(false);
+  const [missingComplianceItems, setMissingComplianceItems] = useState<string[]>([]);
 
   useEffect(() => {
     if (!jobId) {
@@ -114,7 +123,7 @@ export function KanbanBoard({
 
   const grouped = groupByStage();
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     const activeId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
     if (!overId || activeId === overId) {
@@ -142,40 +151,107 @@ export function KanbanBoard({
       return;
     }
 
+    if (targetId === "hired") {
+      try {
+        const check = await checkCandidateCompliance(moved.id);
+        if (!check.compliant) {
+          setMissingComplianceItems(check.missing_items || []);
+          setComplianceModalOpen(true);
+          return;
+        }
+      } catch (err) {
+        console.error("Compliance check failed", err);
+        return;
+      }
+    }
+
+    if (targetId === "disqualified") {
+      setCandidateToDisqualify(moved);
+      setDisqualifyModalOpen(true);
+      return;
+    }
+
     setCandidates((prev) =>
       prev.map((c) =>
         c.id === moved.id ? { ...c, current_stage: targetId } : c,
       ),
     );
 
-    void updateCandidateStage(moved.id, targetId).catch(() => {
+    try {
+      await updateCandidateStage(moved.id, targetId);
+    } catch (err) {
       setCandidates((prev) =>
         prev.map((c) =>
           c.id === moved.id ? { ...c, current_stage: sourceId } : c,
         ),
       );
-    });
+    }
+  }
+
+  async function handleDisqualifyConfirm(reason: string) {
+    if (!candidateToDisqualify) return;
+    
+    const moved = candidateToDisqualify;
+    const sourceId = moved.current_stage || "new_application";
+    const targetId = "disqualified";
+
+    setCandidates((prev) =>
+      prev.map((c) =>
+        c.id === moved.id ? { ...c, current_stage: targetId } : c,
+      ),
+    );
+
+    setDisqualifyModalOpen(false);
+    setCandidateToDisqualify(null);
+
+    try {
+      await updateCandidateStage(moved.id, targetId, reason);
+    } catch (err) {
+      setCandidates((prev) =>
+        prev.map((c) =>
+          c.id === moved.id ? { ...c, current_stage: sourceId } : c,
+        ),
+      );
+    }
   }
 
   return (
-    <DndContextWrapper onDragEnd={handleDragEnd}>
-      {loading ? (
-        <div className="flex items-center justify-center py-12 text-sm text-slate-400">
-          Loading candidates...
-        </div>
-      ) : (
-        <div className="flex gap-4 overflow-x-auto pb-3">
-          {PIPELINE_STAGES.map((stage) => (
-            <KanbanColumn
-              key={stage.key}
-              id={stage.key}
-              title={stage.title}
-              accent={stage.accent}
-              candidates={grouped[stage.key] ?? []}
-            />
-          ))}
-        </div>
-      )}
-    </DndContextWrapper>
+    <>
+      <DndContextWrapper onDragEnd={handleDragEnd}>
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+            Loading candidates...
+          </div>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-3">
+            {PIPELINE_STAGES.map((stage) => (
+              <KanbanColumn
+                key={stage.key}
+                id={stage.key}
+                title={stage.title}
+                accent={stage.accent}
+                candidates={grouped[stage.key] ?? []}
+              />
+            ))}
+          </div>
+        )}
+      </DndContextWrapper>
+
+      <DisqualificationModal
+        candidate={candidateToDisqualify}
+        isOpen={disqualifyModalOpen}
+        onClose={() => {
+          setDisqualifyModalOpen(false);
+          setCandidateToDisqualify(null);
+        }}
+        onConfirm={handleDisqualifyConfirm}
+      />
+
+      <ComplianceAlertModal
+        isOpen={complianceModalOpen}
+        onClose={() => setComplianceModalOpen(false)}
+        missingItems={missingComplianceItems}
+      />
+    </>
   );
 }

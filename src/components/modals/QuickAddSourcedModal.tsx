@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { XUp, X } from "lucide-react";
+import { Upload, X } from "lucide-react";
 import {
   SOURCING_CHANNELS,
   quickAddSourcedCandidate,
@@ -204,7 +204,7 @@ export function QuickAddSourcedModal({
             }}
             onClick={() => fileInputRef.current?.click()}
           >
-            <XUp className="h-6 w-6 text-secondary" />
+            <Upload className="h-6 w-6 text-secondary" />
             {resume ? (
               <span className="font-medium text-primary">{resume.name}</span>
             ) : (
