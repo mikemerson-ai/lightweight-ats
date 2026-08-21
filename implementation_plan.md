@@ -21,7 +21,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ---
 
 ## Phase 2: Job Requisitions, Global Search & Sourced Candidate Ingestion
-- [ ] **Task 2.1: Job Requisition Server Actions & Data Access**
+- [x] **Task 2.1: Job Requisition Server Actions & Data Access**
   - Write Server Actions (`createJob`, `getJobs`, `toggleJobStatus`) to manage job openings.
 - [ ] **Task 2.2: Global Search & Filter Toolbar**
   - Build `SearchBar.tsx` with instant search-as-you-type functionality querying candidate names, skills, and email addresses.
