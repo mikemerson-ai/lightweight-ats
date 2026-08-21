@@ -26,26 +26,27 @@ export function SearchBar() {
     }
 
     const trimmed = query.trim();
-    if (!trimmed) {
-      setResults([]);
-      setOpen(false);
-      setLoading(false);
-      return;
-    }
 
-    setLoading(true);
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const data = await searchCandidates(trimmed);
-        setResults(data);
-        setOpen(true);
-      } catch {
+    debounceRef.current = setTimeout(() => {
+      if (!trimmed) {
         setResults([]);
-        setOpen(true);
-      } finally {
+        setOpen(false);
         setLoading(false);
+        return;
       }
-    }, 300);
+
+      setLoading(true);
+      searchCandidates(trimmed)
+        .then((data) => {
+          setResults(data);
+          setOpen(true);
+        })
+        .catch(() => {
+          setResults([]);
+          setOpen(true);
+        })
+        .finally(() => setLoading(false));
+    }, trimmed ? 300 : 0);
 
     return () => {
       if (debounceRef.current) {

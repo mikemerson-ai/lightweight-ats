@@ -25,7 +25,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
   - Write Server Actions (`createJob`, `getJobs`, `toggleJobStatus`) to manage job openings.
 - [x] **Task 2.2: Global Search & Filter Toolbar**
   - Build `SearchBar.tsx` with instant search-as-you-type functionality querying candidate names, skills, and email addresses.
-- [ ] **Task 2.3: Quick-Add Sourced Candidate Modal**
+- [x] **Task 2.3: Quick-Add Sourced Candidate Modal**
   - Build `QuickAddSourcedModal.tsx` supporting fast candidate entry (Name, Channel, Target Job, Profile URL, Initial Outreach Notes).
   - Add optional drag-and-drop resume attachment field to trigger instant Gemini AI parsing.
 
