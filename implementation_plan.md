@@ -5,7 +5,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ---
 
 ## Phase 1: Project Setup & Supabase Architecture
-- [ ] **Task 1.1: Next.js & UI Initialization (with Reliance Branding)**
+- [x] **Task 1.1: Next.js & UI Initialization (with Reliance Branding)**
   - Initialize Next.js (App Router, TypeScript, Tailwind CSS).
   - Install core UI packages (`lucide-react`, `clsx`, `tailwind-merge`, `recharts`).
   - Configure Tailwind with Reliance brand colors (Navy `#0F2C59`, Teal `#0EA5E9`, Amber `#F59E0B`, Slate `#F8FAFC`).
