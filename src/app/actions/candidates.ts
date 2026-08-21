@@ -31,6 +31,12 @@ export interface Candidate {
   status_tag: string;
   current_stage: string;
   job_id: string;
+  contact_info: string;
+  source_channel: string;
+  source_type: string;
+  pending_resume: boolean;
+  created_at: string;
+  updated_at: string;
   jobs: { title: string } | null;
 }
 
@@ -94,4 +100,36 @@ export async function quickAddSourcedCandidate(
   }
 
   return candidate as Candidate;
+}
+
+export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("*, jobs(title)")
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as Candidate[]) ?? [];
+}
+
+export async function updateCandidateStage(
+  candidateId: string,
+  stage: string,
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("candidates")
+    .update({ current_stage: stage })
+    .eq("id", candidateId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

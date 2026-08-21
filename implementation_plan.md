@@ -35,7 +35,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 - [x] **Task 3.1: Install & Set Up `@dnd-kit`**
   - Install `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities`.
   - Create Client-side wrapper to prevent Next.js SSR hydration mismatches.
-- [ ] **Task 3.2: Kanban Components & Source Badge Rendering**
+- [x] **Task 3.2: Kanban Components & Source Badge Rendering**
   - Build `CandidateCard.tsx` with source badges (`[LinkedIn]`, `[Indeed]`, `[Direct App]`) and drag hooks.
   - Build `KanbanColumn.tsx` droppable containers for all 8 pipeline stages.
   - Build main `KanbanBoard.tsx` with top-level source channel filter dropdown.
