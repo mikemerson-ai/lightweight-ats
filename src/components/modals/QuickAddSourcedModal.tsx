@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Upload, X } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
 import {
   SOURCING_CHANNELS,
   quickAddSourcedCandidate,
 } from "@/app/actions/candidates";
+import { parseResumeAction } from "@/app/actions/resumeParser";
+import type { ParsedCandidate } from "@/lib/gemini/parser";
 import { getJobs, type Job } from "@/app/actions/jobs";
 
 interface QuickAddSourcedModalProps {
@@ -21,10 +23,14 @@ export function QuickAddSourcedModal({
   const [sourceChannel, setSourceChannel] = useState("");
   const [targetJob, setTargetJob] = useState("");
   const [contactInfo, setContactInfo] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [primarySkills, setPrimarySkills] = useState("");
   const [outreachNotes, setOutreachNotes] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [resume, setResume] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -52,19 +58,59 @@ export function QuickAddSourcedModal({
     setSourceChannel("");
     setTargetJob("");
     setContactInfo("");
+    setEmail("");
+    setPhone("");
+    setPrimarySkills("");
     setOutreachNotes("");
     setResume(null);
     setDragging(false);
+    setParsing(false);
     setError("");
   }
 
-  function handleFile(file: File | undefined) {
-    if (file && file.type !== "application/pdf") {
-      setError("Please attach a PDF file.");
+  function applyParsedData(data: ParsedCandidate) {
+    const parsedName = [data.firstName, data.lastName].filter(Boolean).join(" ");
+    if (parsedName) setFullName(parsedName);
+    if (data.email) setEmail(data.email);
+    if (data.phone) setPhone(data.phone);
+    if (data.primarySkills?.length) {
+      setPrimarySkills(data.primarySkills.join(", "));
+    }
+    const summary = data.summary ?? "";
+    const roleFit = data.suggestedRoleFit
+      ? `Suggested Role Fit: ${data.suggestedRoleFit}`
+      : "";
+    const notes = [summary, roleFit].filter(Boolean).join("\n\n");
+    if (notes) setOutreachNotes(notes);
+  }
+
+  async function handleFile(file: File | undefined) {
+    if (!file) {
+      setError("");
       return;
     }
-    setResume(file ?? null);
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["pdf", "docx", "txt"].includes(extension)) {
+      setError("Please attach a PDF, DOCX, or TXT file.");
+      return;
+    }
+    setResume(file);
     setError("");
+    setParsing(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const result = await parseResumeAction(formData);
+      if (!result.success || !result.data) {
+        setError(result.error ?? "AI could not parse this resume. Please fill the fields manually.");
+        return;
+      }
+      applyParsedData(result.data);
+    } catch {
+      setError("Something went wrong while parsing the resume. Please try again.");
+    } finally {
+      setParsing(false);
+    }
   }
 
   async function handleSubmit() {
@@ -82,6 +128,9 @@ export function QuickAddSourcedModal({
         source_channel: sourceChannel as (typeof SOURCING_CHANNELS)[number],
         job_id: targetJob,
         contact_info: contactInfo,
+        email: email,
+        phone: phone,
+        primary_skills: primarySkills,
         outreach_notes: outreachNotes,
       });
       reset();
@@ -175,6 +224,43 @@ export function QuickAddSourcedModal({
             />
           </label>
 
+          <div className="grid grid-cols-2 gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-primary">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="jane.doe@example.com"
+                className={inputClass}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-primary">Phone</span>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="(555) 123-4567"
+                className={inputClass}
+              />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-primary">
+              Primary Skills
+            </span>
+            <input
+              type="text"
+              value={primarySkills}
+              onChange={(e) => setPrimarySkills(e.target.value)}
+              placeholder="e.g. React, TypeScript, Leadership"
+              className={inputClass}
+            />
+          </label>
+
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-primary">
               Recruiter Outreach Notes
@@ -191,7 +277,7 @@ export function QuickAddSourcedModal({
           <div
             className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-sm ${
               dragging ? "border-secondary bg-secondary/10" : "border-slate-300"
-            }`}
+            } ${parsing ? "opacity-60" : ""}`}
             onDragOver={(e) => {
               e.preventDefault();
               setDragging(true);
@@ -202,21 +288,35 @@ export function QuickAddSourcedModal({
               setDragging(false);
               handleFile(e.dataTransfer.files?.[0]);
             }}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => !parsing && fileInputRef.current?.click()}
           >
-            <Upload className="h-6 w-6 text-secondary" />
-            {resume ? (
-              <span className="font-medium text-primary">{resume.name}</span>
+            {parsing ? (
+              <>
+                <Loader2 className="h-6 w-6 text-secondary animate-spin" />
+                <span className="font-medium text-primary">
+                  AI Parsing with Gemini 2.5 Flash...
+                </span>
+                <span className="text-secondary/80">Extracting candidate details</span>
+              </>
             ) : (
               <>
-                <span className="font-medium">Drag resume PDF here</span>
-                <span className="text-slate-400">or click to browse</span>
+                <Upload className="h-6 w-6 text-secondary" />
+                {resume ? (
+                  <span className="font-medium text-primary">{resume.name}</span>
+                ) : (
+                  <>
+                    <span className="font-medium">
+                      Drag resume here (PDF, DOCX, TXT)
+                    </span>
+                    <span className="text-slate-400">or click to browse</span>
+                  </>
+                )}
               </>
             )}
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf"
+              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               className="hidden"
               onChange={(e) => handleFile(e.target.files?.[0] ?? undefined)}
             />

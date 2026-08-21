@@ -18,6 +18,9 @@ export interface QuickAddSourcedCandidateInput {
   source_channel: SourcingChannel;
   job_id: string;
   contact_info: string;
+  email?: string;
+  phone?: string;
+  primary_skills?: string;
   outreach_notes?: string;
 }
 
@@ -78,6 +81,9 @@ export async function quickAddSourcedCandidate(
       source_type: "outbound",
       job_id: data.job_id,
       contact_info: data.contact_info,
+      email: data.email,
+      phone: data.phone,
+      primary_skills: data.primary_skills,
       pending_resume: true,
     })
     .select("*, jobs(title)")

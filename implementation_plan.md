@@ -46,12 +46,13 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ---
 
 ## Phase 4: Gemini 2.5 Flash AI Parsing & Smart Conflict Resolution
-- [ ] **Task 4.1: Gemini SDK & Parsing Route**
+- [x] **Task 4.1: Gemini SDK & Parsing Route**
   - Install `@google/genai` SDK.
   - Create API route/Server Action (`/api/parse-document`) for Gemini 2.5 Flash with structured JSON output schema.
-- [ ] **Task 4.2: Field Conflict Review Modal & Auto-Append Engine**
-  - Build auto-append logic for blank database fields.
-  - Build `FieldConflictModal.tsx` side-by-side comparison UI displaying current database values vs. new document values with selective overwrite checkboxes.
+- [x] **Task 4.2: AI Resume Parsing Dropzone & Quick-Add Pre-Fill**
+  - Add interactive drag-and-drop upload zone to `QuickAddSourcedModal.tsx` accepting PDF, DOCX, and TXT files.
+  - Integrate `parseResumeAction` (Gemini 2.5 Flash) with a loading spinner and 'AI Parsing with Gemini 2.5 Flash...' status.
+  - Auto-populate Full Name (First/Last), Email, Phone, Primary Skills, and Recruiter Outreach Notes (summary + suggested role fit) with full manual override before submit.
 
 ---
 
