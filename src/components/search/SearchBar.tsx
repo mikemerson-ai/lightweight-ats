@@ -1,0 +1,128 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
+import { searchCandidates } from "@/app/actions/candidates";
+
+interface SearchResult {
+  id: string;
+  first_name: string;
+  last_name: string;
+  current_stage: string;
+  jobs: { title: string } | null;
+}
+
+export function SearchBar() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setOpen(false);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const data = await searchCandidates(trimmed);
+        setResults(data);
+        setOpen(true);
+      } catch {
+        setResults([]);
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [query]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={rootRef} className="relative w-full max-w-xl">
+      <div className="flex items-center gap-2 rounded-full border bg-card px-4 py-2.5">
+        <Search className="h-4 w-4 text-primary" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search candidates by name, skill, email..."
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-slate-400 focus:outline-none"
+          onFocus={() => results.length > 0 && setOpen(true)}
+        />
+        {loading ? (
+          <span className="h-3 w-3 animate-pulse rounded-full bg-secondary" />
+        ) : query ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            className="text-slate-400 hover:text-danger"
+            onClick={() => {
+              setQuery("");
+              setResults([]);
+              setOpen(false);
+            }}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
+      {open && query.trim() && (
+        <div className="absolute top-full mt-2 left-0 right-0 z-50 rounded-lg border bg-card shadow-lg overflow-hidden">
+          {results.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-slate-400">
+              No candidates found
+            </div>
+          ) : (
+            results.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-100"
+              >
+                <span className="flex flex-col">
+                  <span className="text-sm font-semibold text-primary">
+                    {candidate.first_name} {candidate.last_name}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {candidate.jobs?.title ?? "No job assigned"}
+                  </span>
+                </span>
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                  {candidate.current_stage ?? "New Application"}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
