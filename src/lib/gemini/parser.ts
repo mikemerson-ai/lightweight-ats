@@ -2,6 +2,12 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+export interface JobContext {
+  title: string;
+  description: string;
+  requirements: string;
+}
+
 export interface ParsedCandidate {
   firstName: string;
   lastName: string;
@@ -13,7 +19,7 @@ export interface ParsedCandidate {
   suggestedRoleFit: string;
 }
 
-export async function parseResumeData(payload: File | string): Promise<ParsedCandidate> {
+export async function parseResumeData(payload: File | string, jobContext?: JobContext): Promise<ParsedCandidate> {
   const schema = {
     type: Type.OBJECT,
     properties: {
@@ -39,10 +45,16 @@ export async function parseResumeData(payload: File | string): Promise<ParsedCan
   };
 
   let contents: any[];
+  
+  let instructions = "You are an expert technical recruiter. Parse the attached resume document and extract the candidate information according to the schema.";
+  
+  if (jobContext) {
+    instructions += `\n\nCompare the candidate's experience strictly against the provided job description and requirements. The 'summary' MUST be a 2-sentence candidate overview highlighting relevance to this specific role. The 'suggestedRoleFit' MUST be a fit level rating (e.g., 'Strong Fit', 'Moderate Fit', 'Skill Gap') plus a brief explanation of why.\n\nJob Title: ${jobContext.title}\nJob Description: ${jobContext.description}\nJob Requirements: ${jobContext.requirements}`;
+  }
 
   if (typeof payload === 'string') {
     contents = [
-      "You are an expert technical recruiter. Parse the following resume text and extract the candidate information according to the schema.\n\n" + payload
+      `${instructions}\n\nCandidate Resume:\n${payload}`
     ];
   } else {
     // It's a File object
@@ -50,7 +62,7 @@ export async function parseResumeData(payload: File | string): Promise<ParsedCan
     const mimeType = payload.type || 'application/pdf'; // fallback to pdf
     
     contents = [
-      "You are an expert technical recruiter. Parse the attached resume document and extract the candidate information according to the schema.",
+      instructions,
       {
         inlineData: {
           data: fileBase64,
@@ -61,7 +73,7 @@ export async function parseResumeData(payload: File | string): Promise<ParsedCan
   }
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.6-flash',
     contents: contents,
     config: {
       responseMimeType: 'application/json',

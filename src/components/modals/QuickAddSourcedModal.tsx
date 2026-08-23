@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
-import {
-  SOURCING_CHANNELS,
-  quickAddSourcedCandidate,
-} from "@/app/actions/candidates";
+import { quickAddSourcedCandidate } from "@/app/actions/candidates";
+import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { parseResumeAction } from "@/app/actions/resumeParser";
 import type { ParsedCandidate } from "@/lib/gemini/parser";
 import { getJobs, type Job } from "@/app/actions/jobs";
+import { useRecruiter } from "@/context/RecruiterContext";
 
 interface QuickAddSourcedModalProps {
   open: boolean;
@@ -20,6 +19,8 @@ export function QuickAddSourcedModal({
   onClose,
 }: QuickAddSourcedModalProps) {
   const [fullName, setFullName] = useState("");
+  const [candidateOrigin, setCandidateOrigin] = useState<"sourced" | "applied">("applied");
+  const [eventDate, setEventDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [sourceChannel, setSourceChannel] = useState("");
   const [targetJob, setTargetJob] = useState("");
   const [contactInfo, setContactInfo] = useState("");
@@ -37,6 +38,8 @@ export function QuickAddSourcedModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
+  const { activeRecruiter } = useRecruiter();
 
   useEffect(() => {
     if (open) {
@@ -58,6 +61,8 @@ export function QuickAddSourcedModal({
 
   function reset() {
     setFullName("");
+    setCandidateOrigin("applied");
+    setEventDate(new Date().toISOString().split("T")[0]);
     setSourceChannel("");
     setTargetJob("");
     setContactInfo("");
@@ -125,7 +130,7 @@ export function QuickAddSourcedModal({
   }
 
   async function handleSubmit() {
-    if (!firstName || !sourceChannel || !targetJob || !contactInfo) {
+    if (!firstName || !sourceChannel || !targetJob) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -136,9 +141,14 @@ export function QuickAddSourcedModal({
       await quickAddSourcedCandidate({
         first_name: firstName,
         last_name: lastName,
-        source_channel: sourceChannel as (typeof SOURCING_CHANNELS)[number],
+        source_channel: sourceChannel,
+        source_type: candidateOrigin,
+        pending_resume: candidateOrigin === "sourced",
+        date_applied: candidateOrigin === "applied" ? eventDate : undefined,
+        date_sourced: candidateOrigin === "sourced" ? eventDate : undefined,
         job_id: targetJob,
-        contact_info: contactInfo,
+        contact_info: contactInfo || email || phone || "Not Provided",
+        linkedin_url: contactInfo,
         email: email,
         phone: phone,
         primary_skills: primarySkills,
@@ -148,18 +158,20 @@ export function QuickAddSourcedModal({
         ai_summary: aiSummary,
         suggested_role_fit: suggestedRoleFit,
         outreach_notes: outreachNotes,
+        author_name: activeRecruiter?.name || "Recruiter",
       });
       reset();
       onClose();
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Something went wrong. Please try again.");
     } finally {
       setSaving(false);
     }
   }
 
   const inputClass =
-    "rounded-md border bg-primary-foreground px-3 py-2 text-sm focus:border-secondary focus:outline-none";
+    "w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 font-normal focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -167,7 +179,7 @@ export function QuickAddSourcedModal({
       <div className="relative w-full max-w-lg rounded-xl border bg-white shadow-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between bg-primary px-5 py-4">
           <h2 className="text-lg font-semibold text-white">
-            Quick-Add Sourced Candidate
+            Quick-Add Candidate
           </h2>
           <button
             type="button"
@@ -192,6 +204,52 @@ export function QuickAddSourcedModal({
           </label>
 
           <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-primary">Candidate Type *</span>
+            <div className="flex rounded-md border border-slate-300 overflow-hidden bg-white">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                  candidateOrigin === "applied"
+                    ? "bg-primary text-white"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  setCandidateOrigin("applied");
+                  setSourceChannel("");
+                }}
+              >
+                Applied
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                  candidateOrigin === "sourced"
+                    ? "bg-primary text-white"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  setCandidateOrigin("sourced");
+                  setSourceChannel("");
+                }}
+              >
+                Sourced
+              </button>
+            </div>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-primary">
+              {candidateOrigin === "applied" ? "Date Applied *" : "Date Sourced *"}
+            </span>
+            <input
+              type="date"
+              value={eventDate}
+              onChange={(e) => setEventDate(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-primary">
               Sourcing Channel *
             </span>
@@ -201,7 +259,7 @@ export function QuickAddSourcedModal({
               className={inputClass}
             >
               <option value="">Select a channel</option>
-              {SOURCING_CHANNELS.map((channel) => (
+              {(candidateOrigin === "applied" ? APPLIED_CHANNELS : SOURCING_CHANNELS).map((channel) => (
                 <option key={channel} value={channel}>
                   {channel}
                 </option>
@@ -229,13 +287,13 @@ export function QuickAddSourcedModal({
 
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-primary">
-              Contact Info / Profile URL *
+              LinkedIn Profile URL
             </span>
             <input
               type="text"
               value={contactInfo}
               onChange={(e) => setContactInfo(e.target.value)}
-              placeholder="Email, phone, or LinkedIn profile"
+              placeholder="https://linkedin.com/in/username"
               className={inputClass}
             />
           </label>

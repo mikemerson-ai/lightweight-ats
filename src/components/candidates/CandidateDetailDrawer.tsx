@@ -6,6 +6,7 @@ import {
   type Candidate,
   getCandidateActivity,
   getCandidateDocuments,
+  deleteCandidate,
   type ActivityLogEntry,
   type ComplianceDocument,
 } from "@/app/actions/candidates";
@@ -13,6 +14,7 @@ import {
   getSourceBadgeVariant,
   sourceBadgeLabel,
 } from "@/components/kanban/CandidateCard";
+import { Trash2 } from "lucide-react";
 
 const STAGE_TITLES: Record<string, string> = {
   new_application: "New Application",
@@ -27,8 +29,8 @@ const STAGE_TITLES: Record<string, string> = {
 
 const BADGE_VARIANT_STYLES: Record<string, string> = {
   inbound:
-    "rounded-full border border-primary/30 bg-slate-50 px-2 py-0.5 text-xs font-medium text-primary",
-  sourced: "rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-white",
+    "rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-medium text-white",
+  sourced: "rounded-full bg-blue-500 px-2 py-0.5 text-xs font-medium text-white",
   referral:
     "rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white",
 };
@@ -70,6 +72,26 @@ export function CandidateDetailDrawer({
   const [activeTab, setActiveTab] = useState<"compliance" | "activity">(
     "activity",
   );
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!candidate) return;
+    setIsDeleting(true);
+    try {
+      await deleteCandidate(candidate.id);
+      onClose();
+      // Need to trigger a board refresh, typically handled by parent component re-fetching or optimistic updates. 
+      // Refreshing the page is the simplest fallback.
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to delete candidate", err);
+      alert("Failed to delete candidate");
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
 
   useEffect(() => {
     if (!candidate) {
@@ -83,6 +105,9 @@ export function CandidateDetailDrawer({
     getCandidateDocuments(candidate.id)
       .then(setDocuments)
       .catch(() => setDocuments([]));
+    
+    // Reset state on candidate change
+    setShowDeleteConfirm(false);
   }, [candidate]);
 
   const skills =
@@ -106,14 +131,25 @@ export function CandidateDetailDrawer({
           <div className="flex flex-col gap-0 bg-primary px-6 py-5 text-white">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">{candidate.first_name} {candidate.last_name}</h2>
-              <button
-                type="button"
-                aria-label="Close profile"
-                className="text-white hover:text-white/70"
-                onClick={onClose}
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Delete candidate"
+                  className="flex items-center gap-1.5 rounded-md bg-danger px-2.5 py-1 text-xs font-medium text-white hover:bg-danger/90 transition-colors"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete Candidate
+                </button>
+                <button
+                  type="button"
+                  aria-label="Close profile"
+                  className="text-white hover:text-white/70"
+                  onClick={onClose}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-secondary/90">
@@ -122,7 +158,7 @@ export function CandidateDetailDrawer({
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-white">
-                {STAGE_TITLES[candidate.current_stage] ?? candidate.current_stage}
+                {STAGE_TITLES[candidate.pipeline_stage] ?? candidate.pipeline_stage}
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${BADGE_VARIANT_STYLES[getSourceBadgeVariant(candidate)]}`}
@@ -143,6 +179,28 @@ export function CandidateDetailDrawer({
               )}
             </div>
           </div>
+          
+          {showDeleteConfirm && (
+            <div className="bg-danger/10 p-4 border-b border-danger/20">
+              <p className="text-sm text-danger font-medium mb-2">Are you sure you want to delete this candidate? This action cannot be undone.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="bg-danger text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-danger/90 disabled:opacity-50"
+                >
+                  {isDeleting ? "Deleting..." : "Yes, Delete Candidate"}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded text-sm font-medium hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto bg-slate-50 flex flex-col gap-6 p-6">
             <section className="rounded-xl border bg-white p-5">

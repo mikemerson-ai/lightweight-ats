@@ -1,6 +1,8 @@
 'use server';
 
-import { parseResumeData, ParsedCandidate } from '@/lib/gemini/parser';
+import mammoth from 'mammoth';
+import { parseResumeData, ParsedCandidate, JobContext } from '@/lib/gemini/parser';
+import { getJobById } from '@/app/actions/jobs';
 
 export interface ParseResumeResult {
   success: boolean;
@@ -12,22 +14,44 @@ export async function parseResumeAction(formData: FormData): Promise<ParseResume
   try {
     const file = formData.get('file');
     const text = formData.get('text');
+    const jobId = formData.get('jobId') as string | undefined;
 
     if (!file && !text) {
       return { success: false, error: 'No resume file or text provided' };
     }
 
+    let jobContext: JobContext | undefined;
+    if (jobId) {
+      const job = await getJobById(jobId);
+      if (job) {
+        jobContext = {
+          title: job.title,
+          description: job.description,
+          requirements: job.requirements,
+        };
+      }
+    }
+
     let payload: File | string;
 
     if (file && file instanceof File && file.size > 0) {
-      payload = file;
+      const fileType = file.type;
+      const isDocx = fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx');
+
+      if (isDocx) {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const result = await mammoth.extractRawText({ buffer });
+        payload = result.value;
+      } else {
+        payload = file;
+      }
     } else if (text && typeof text === 'string') {
       payload = text;
     } else {
       return { success: false, error: 'Invalid payload provided' };
     }
 
-    const parsedData = await parseResumeData(payload);
+    const parsedData = await parseResumeData(payload, jobContext);
 
     return {
       success: true,

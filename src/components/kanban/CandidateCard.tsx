@@ -8,33 +8,31 @@ import { type Candidate } from "@/app/actions/candidates";
 export type SourceBadgeVariant = "inbound" | "sourced" | "referral";
 
 export function getSourceBadgeVariant(candidate: Candidate): SourceBadgeVariant {
-  if (candidate.source_channel === "Employee Referral") {
-    return "referral";
-  }
-  if (candidate.source_type === "outbound") {
+  if (candidate.source_type === "outbound" || candidate.source_type === "sourced") {
     return "sourced";
   }
   return "inbound";
 }
 
+function formatOriginDate(dateStr?: string | null): string {
+  if (!dateStr) return "";
+  const parts = dateStr.split("T")[0].split("-");
+  if (parts.length !== 3) return "";
+  return `: ${parts[1]}/${parts[2]}/${parts[0]}`;
+}
+
 export function sourceBadgeLabel(candidate: Candidate): string {
-  if (candidate.pending_resume) {
-    return "Pending Resume / Sourced";
+  if (candidate.source_type === "outbound" || candidate.source_type === "sourced") {
+    return `Sourced${formatOriginDate(candidate.date_sourced)}`;
   }
-  if (candidate.source_channel) {
-    return candidate.source_channel;
-  }
-  if (candidate.source_type === "outbound") {
-    return "Outbound";
-  }
-  return "Direct App";
+  return `Applied${formatOriginDate(candidate.date_applied)}`;
 }
 
 const BADGE_STYLES: Record<SourceBadgeVariant, string> = {
   inbound:
-    "rounded-full border border-primary/30 bg-slate-50 px-2 py-0.5 text-xs font-medium text-primary",
+    "rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-medium text-white",
   sourced:
-    "rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground",
+    "rounded-full bg-blue-500 px-2 py-0.5 text-xs font-medium text-white",
   referral:
     "rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white",
 };

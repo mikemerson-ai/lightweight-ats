@@ -118,7 +118,7 @@ export function KanbanBoard({
       grouped[stage.key] = [];
     }
     for (const candidate of filtered) {
-      const key = candidate.current_stage || "new_application";
+      const key = candidate.pipeline_stage || "new_application";
       grouped[key] = grouped[key] ? [...grouped[key], candidate] : [candidate];
     }
     return grouped;
@@ -144,10 +144,10 @@ export function KanbanBoard({
       return;
     }
 
-    const sourceId = moved.current_stage || "new_application";
+    const sourceId = moved.pipeline_stage || "new_application";
     const overCard = candidates.find((c) => c.id === overId);
     const targetId = overCard
-      ? overCard.current_stage || "new_application"
+      ? overCard.pipeline_stage || "new_application"
       : overId;
 
     if (sourceId === targetId) {
@@ -176,7 +176,7 @@ export function KanbanBoard({
 
     setCandidates((prev) =>
       prev.map((c) =>
-        c.id === moved.id ? { ...c, current_stage: targetId } : c,
+        c.id === moved.id ? { ...c, pipeline_stage: targetId } : c,
       ),
     );
 
@@ -185,7 +185,7 @@ export function KanbanBoard({
     } catch (err) {
       setCandidates((prev) =>
         prev.map((c) =>
-          c.id === moved.id ? { ...c, current_stage: sourceId } : c,
+          c.id === moved.id ? { ...c, pipeline_stage: sourceId } : c,
         ),
       );
     }
@@ -195,12 +195,12 @@ export function KanbanBoard({
     if (!candidateToDisqualify) return;
     
     const moved = candidateToDisqualify;
-    const sourceId = moved.current_stage || "new_application";
+    const sourceId = moved.pipeline_stage || "new_application";
     const targetId = "disqualified";
 
     setCandidates((prev) =>
       prev.map((c) =>
-        c.id === moved.id ? { ...c, current_stage: targetId } : c,
+        c.id === moved.id ? { ...c, pipeline_stage: targetId } : c,
       ),
     );
 
@@ -212,7 +212,7 @@ export function KanbanBoard({
     } catch (err) {
       setCandidates((prev) =>
         prev.map((c) =>
-          c.id === moved.id ? { ...c, current_stage: sourceId } : c,
+          c.id === moved.id ? { ...c, pipeline_stage: sourceId } : c,
         ),
       );
     }

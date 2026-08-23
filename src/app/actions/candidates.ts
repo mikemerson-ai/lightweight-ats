@@ -2,15 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 
-export const SOURCING_CHANNELS = [
-  "LinkedIn Recruiter",
-  "Indeed Resume Database",
-  "Employee Referral",
-  "Headhunter / Agency",
-  "Talent Pool Rediscovery",
-] as const;
-
-export type SourcingChannel = (typeof SOURCING_CHANNELS)[number];
+import { SourcingChannel } from "@/lib/constants";
 
 export interface QuickAddSourcedCandidateInput {
   first_name: string;
@@ -25,6 +17,12 @@ export interface QuickAddSourcedCandidateInput {
   ai_summary?: string | null;
   suggested_role_fit?: string | null;
   outreach_notes?: string;
+  linkedin_url?: string;
+  source_type?: string;
+  pending_resume?: boolean;
+  date_applied?: string;
+  date_sourced?: string;
+  author_name?: string;
 }
 
 export interface Candidate {
@@ -35,17 +33,20 @@ export interface Candidate {
   phone: string;
   primary_skills: string;
   status_tag: string;
-  current_stage: string;
+  pipeline_stage: string;
   job_id: string;
   contact_info: string;
   source_channel: string;
   source_type: string;
   pending_resume: boolean;
+  linkedin_url?: string;
   years_of_experience?: number | null;
   ai_summary?: string | null;
   suggested_role_fit?: string | null;
   created_at: string;
   updated_at: string;
+  date_applied?: string;
+  date_sourced?: string;
   jobs: { title: string } | null;
 }
 
@@ -135,18 +136,21 @@ export async function quickAddSourcedCandidate(
     .insert({
       first_name: data.first_name,
       last_name: data.last_name,
-      current_stage: "new_application",
+      pipeline_stage: "new_application",
       source_channel: data.source_channel,
-      source_type: "outbound",
+      source_type: data.source_type || "outbound",
       job_id: data.job_id,
       contact_info: data.contact_info,
+      linkedin_url: data.linkedin_url,
       email: data.email,
       phone: data.phone,
       primary_skills: data.primary_skills,
       years_of_experience: data.years_of_experience,
       ai_summary: data.ai_summary,
       suggested_role_fit: data.suggested_role_fit,
-      pending_resume: true,
+      pending_resume: data.pending_resume ?? true,
+      date_applied: data.date_applied,
+      date_sourced: data.date_sourced,
     })
     .select("*, jobs(title)")
     .single();
@@ -160,6 +164,7 @@ export async function quickAddSourcedCandidate(
       candidate_id: candidate.id,
       activity_type: "outreach_note",
       notes: data.outreach_notes,
+      author_name: data.author_name || "Recruiter",
     });
 
     if (logError) {
@@ -193,7 +198,7 @@ export async function updateCandidateStage(
 ): Promise<void> {
   const supabase = await createClient();
 
-  const updateData: any = { current_stage: stage };
+  const updateData: any = { pipeline_stage: stage };
   if (disqualificationReason) {
     updateData.disqualification_reason = disqualificationReason;
   }
@@ -225,4 +230,22 @@ export async function checkCandidateCompliance(
     compliant: data?.compliant ?? false,
     missing_items: data?.missing_items ?? [],
   };
+}
+
+export async function deleteCandidate(candidateId: string): Promise<void> {
+  const supabase = await createClient();
+
+  // Delete associated records manually to ensure they are removed if cascading deletes aren't configured
+  await supabase.from("activity_logs").delete().eq("candidate_id", candidateId);
+  await supabase.from("document_checklists").delete().eq("candidate_id", candidateId);
+  await supabase.from("evaluations").delete().eq("candidate_id", candidateId);
+
+  const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
 }

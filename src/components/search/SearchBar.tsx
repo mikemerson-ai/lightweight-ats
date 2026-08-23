@@ -8,7 +8,7 @@ interface SearchResult {
   id: string;
   first_name: string;
   last_name: string;
-  current_stage: string;
+  pipeline_stage: string;
   jobs: { title: string } | null;
 }
 
@@ -117,7 +117,7 @@ export function SearchBar() {
                   </span>
                 </span>
                 <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-                  {candidate.current_stage ?? "New Application"}
+                  {candidate.pipeline_stage ?? "New Application"}
                 </span>
               </button>
             ))
