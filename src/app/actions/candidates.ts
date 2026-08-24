@@ -17,6 +17,7 @@ export interface QuickAddSourcedCandidateInput {
   ai_summary?: string | null;
   suggested_role_fit?: string | null;
   outreach_notes?: string;
+  notes?: string;
   linkedin_url?: string;
   source_type?: string;
   pending_resume?: boolean;
@@ -159,6 +160,21 @@ export async function quickAddSourcedCandidate(
     throw new Error(error.message);
   }
 
+  const logPayload = {
+    candidate_id: candidate.id,
+    activity_type: "Candidate Created",
+    notes: data.notes || "Candidate profile created",
+    author_name: data.author_name || "Recruiter",
+  };
+
+  const { error: createLogError } = await supabase
+    .from("activity_logs")
+    .insert(logPayload);
+
+  if (createLogError) {
+    throw new Error(createLogError.message);
+  }
+
   if (data.outreach_notes) {
     const { error: logError } = await supabase.from("activity_logs").insert({
       candidate_id: candidate.id,
@@ -199,9 +215,6 @@ export async function updateCandidateStage(
   const supabase = await createClient();
 
   const updateData: any = { pipeline_stage: stage };
-  if (disqualificationReason) {
-    updateData.disqualification_reason = disqualificationReason;
-  }
 
   const { error } = await supabase
     .from("candidates")
@@ -211,6 +224,19 @@ export async function updateCandidateStage(
   if (error) {
     throw new Error(error.message);
   }
+
+  let notes = `Moved to ${stage}`;
+  if (stage === "disqualified" && disqualificationReason) {
+    notes += `. Reason: ${disqualificationReason}`;
+  } else if (disqualificationReason) {
+    notes += `. Reason: ${disqualificationReason}`;
+  }
+
+  await supabase.from("activity_logs").insert({
+    candidate_id: candidateId,
+    activity_type: "Stage Change",
+    notes: notes,
+  });
 }
 
 export async function checkCandidateCompliance(

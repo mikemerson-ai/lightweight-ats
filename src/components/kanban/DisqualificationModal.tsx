@@ -54,7 +54,7 @@ export function DisqualificationModal({
           </button>
         </div>
         <div className="grid gap-4 p-6">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             Please select a reason for disqualifying{" "}
             <span className="font-medium text-slate-900">
               {candidate?.first_name} {candidate?.last_name}
@@ -72,13 +72,17 @@ export function DisqualificationModal({
               id="reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="rounded-md border bg-white px-3 py-2 text-sm focus:border-secondary focus:outline-none"
+              className="text-slate-900 dark:text-slate-100 font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md px-3 py-2 text-sm focus:outline-none transition-colors"
             >
-              <option value="" disabled>
+              <option value="" disabled className="text-slate-400">
                 Select a reason
               </option>
               {DISQUALIFICATION_REASONS.map((r) => (
-                <option key={r} value={r}>
+                <option
+                  key={r}
+                  value={r}
+                  className="text-slate-900 dark:text-slate-100 font-medium bg-white dark:bg-slate-800"
+                >
                   {r}
                 </option>
               ))}
@@ -88,7 +92,7 @@ export function DisqualificationModal({
         <div className="flex gap-2 px-6 pb-5">
           <button
             type="button"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+            className="text-slate-700 dark:text-slate-200 font-medium bg-white hover:bg-slate-50 border border-slate-300 dark:border-slate-600 rounded-md px-4 py-2 text-sm transition-colors"
             onClick={onClose}
           >
             Cancel

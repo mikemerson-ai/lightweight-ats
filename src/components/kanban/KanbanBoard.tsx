@@ -40,7 +40,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     accent: "bg-secondary",
   },
   { key: "hired", title: "Hired", accent: "bg-success" },
-  { key: "disqualified", title: "Disqualified", accent: "bg-danger" },
+  { key: "disqualified", title: "Rejected", accent: "bg-danger" },
 ];
 
 export interface KanbanBoardProps {
@@ -154,9 +154,15 @@ export function KanbanBoard({
       return;
     }
 
+    await handleStageChange(moved, targetId);
+  }
+
+  async function handleStageChange(candidate: Candidate, targetId: string) {
+    const sourceId = candidate.pipeline_stage || "new_application";
+
     if (targetId === "hired") {
       try {
-        const check = await checkCandidateCompliance(moved.id);
+        const check = await checkCandidateCompliance(candidate.id);
         if (!check.compliant) {
           setMissingComplianceItems(check.missing_items || []);
           setComplianceModalOpen(true);
@@ -169,25 +175,31 @@ export function KanbanBoard({
     }
 
     if (targetId === "disqualified") {
-      setCandidateToDisqualify(moved);
+      setCandidateToDisqualify(candidate);
       setDisqualifyModalOpen(true);
       return;
     }
 
     setCandidates((prev) =>
       prev.map((c) =>
-        c.id === moved.id ? { ...c, pipeline_stage: targetId } : c,
+        c.id === candidate.id ? { ...c, pipeline_stage: targetId } : c,
       ),
     );
+    if (selectedCandidate?.id === candidate.id) {
+      setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: targetId } : null);
+    }
 
     try {
-      await updateCandidateStage(moved.id, targetId);
+      await updateCandidateStage(candidate.id, targetId);
     } catch (err) {
       setCandidates((prev) =>
         prev.map((c) =>
-          c.id === moved.id ? { ...c, pipeline_stage: sourceId } : c,
+          c.id === candidate.id ? { ...c, pipeline_stage: sourceId } : c,
         ),
       );
+      if (selectedCandidate?.id === candidate.id) {
+        setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: sourceId } : null);
+      }
     }
   }
 
@@ -203,6 +215,9 @@ export function KanbanBoard({
         c.id === moved.id ? { ...c, pipeline_stage: targetId } : c,
       ),
     );
+    if (selectedCandidate?.id === moved.id) {
+      setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: targetId } : null);
+    }
 
     setDisqualifyModalOpen(false);
     setCandidateToDisqualify(null);
@@ -210,11 +225,16 @@ export function KanbanBoard({
     try {
       await updateCandidateStage(moved.id, targetId, reason);
     } catch (err) {
+      console.error("Disqualify failed:", err);
+      alert("Disqualify failed: " + String(err));
       setCandidates((prev) =>
         prev.map((c) =>
           c.id === moved.id ? { ...c, pipeline_stage: sourceId } : c,
         ),
       );
+      if (selectedCandidate?.id === moved.id) {
+        setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: sourceId } : null);
+      }
     }
   }
 
@@ -260,6 +280,7 @@ export function KanbanBoard({
       <CandidateDetailDrawer
         candidate={selectedCandidate}
         onClose={() => setSelectedCandidate(null)}
+        onStageChange={(candidate, stage) => handleStageChange(candidate, stage)}
       />
     </>
   );
