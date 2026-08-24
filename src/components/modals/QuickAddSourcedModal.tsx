@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
-import { quickAddSourcedCandidate, checkCandidateDuplicate } from "@/app/actions/candidates";
+import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume } from "@/app/actions/candidates";
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { parseResumeAction } from "@/app/actions/resumeParser";
 import type { ParsedCandidate } from "@/lib/gemini/parser";
@@ -165,6 +165,46 @@ export function QuickAddSourcedModal({
     }
   }
 
+  async function handleUpdateExisting() {
+    if (!duplicateInfo?.existingRecord?.id) return;
+    
+    setSaving(true);
+    setError("");
+    try {
+      const parsedData: ParsedCandidate = {
+        firstName,
+        lastName,
+        email,
+        phone,
+        address,
+        primarySkills: primarySkills ? primarySkills.split(",").map(s => s.trim()) : [],
+        fitSummary: aiSummary,
+        fitRating: fitRating ?? 0,
+        yearsOfExperience: Number(yearsOfExperience) || 0,
+        work_experience: workExperience
+      };
+      
+      const res = await updateDuplicateCandidateResume(
+        duplicateInfo.existingRecord.id, 
+        parsedData, 
+        activeRecruiter?.name
+      );
+      
+      if (!res.success) {
+        throw new Error(res.error || "Failed to update candidate.");
+      }
+      
+      window.alert("Candidate resume and evaluation updated successfully");
+      reset();
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!firstName || !sourceChannel || !targetJob) {
       setError("Please fill in all required fields.");
@@ -213,7 +253,7 @@ export function QuickAddSourcedModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-primary/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-primary/50" onClick={() => { reset(); onClose(); }} />
       <div className="relative w-full max-w-lg rounded-xl border bg-white shadow-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between bg-primary px-5 py-4">
           <h2 className="text-lg font-semibold text-white">
@@ -223,7 +263,7 @@ export function QuickAddSourcedModal({
             type="button"
             aria-label="Close"
             className="text-white hover:text-white/70"
-            onClick={onClose}
+            onClick={() => { reset(); onClose(); }}
           >
             <X className="h-5 w-5" />
           </button>
@@ -475,9 +515,23 @@ export function QuickAddSourcedModal({
 
           {error && <p className="text-sm text-danger">{error}</p>}
 
-          {duplicateInfo?.isDuplicate && duplicateInfo.sameJob && (
-            <div className="rounded-md bg-amber-50 p-3 border border-amber-200 text-sm text-amber-800">
-              ⚠️ Existing Candidate: This candidate already exists in this job opening at the {duplicateInfo.existingRecord?.pipeline_stage?.replace(/_/g, ' ') || 'unknown'} stage.
+          {duplicateInfo?.isDuplicate && duplicateInfo.sameJob && duplicateInfo.existingRecord?.dnh_flag && (
+            <div className="rounded-md bg-red-50 p-3 border border-red-200 text-sm text-red-800">
+              ⚠️ Existing Candidate: This candidate is flagged Do Not Hire (DNH). Resume updates are prohibited.
+            </div>
+          )}
+
+          {duplicateInfo?.isDuplicate && duplicateInfo.sameJob && !duplicateInfo.existingRecord?.dnh_flag && (
+            <div className="rounded-md bg-amber-50 p-3 border border-amber-200 text-sm flex flex-col gap-2 text-amber-800">
+              <p>⚠️ Existing Candidate: This candidate already exists in this job opening at the {duplicateInfo.existingRecord?.pipeline_stage?.replace(/_/g, ' ') || 'unknown'} stage.</p>
+              <button 
+                type="button" 
+                onClick={handleUpdateExisting} 
+                disabled={saving}
+                className="w-fit rounded-md bg-amber-100 px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-200 transition-colors disabled:opacity-50"
+              >
+                Update Existing Resume & Re-Evaluate
+              </button>
             </div>
           )}
 
@@ -499,7 +553,17 @@ export function QuickAddSourcedModal({
             <button
               type="button"
               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-              onClick={onClose}
+              onClick={reset}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+              onClick={() => {
+                reset();
+                onClose();
+              }}
             >
               Cancel
             </button>

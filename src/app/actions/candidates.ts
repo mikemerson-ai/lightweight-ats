@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { CandidateDocument } from "@/types/documents";
+import type { ParsedCandidate } from "@/lib/gemini/parser";
 
 import { SourcingChannel } from "@/lib/constants";
 
@@ -172,7 +173,7 @@ export async function checkCandidateDuplicate(
 
   const { data, error } = await supabase
     .from("candidates")
-    .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at")
+    .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag")
     .ilike("email", email.trim())
     .order("created_at", { ascending: false });
 
@@ -520,4 +521,73 @@ export async function updateCandidateProfile(
   revalidatePath("/");
 
   return { success: true };
+}
+
+export async function updateDuplicateCandidateResume(
+  candidateId: string,
+  parsedData: ParsedCandidate,
+  updatedBy?: string
+): Promise<{ success: boolean; error?: string; candidateId?: string }> {
+  const supabase = await createClient();
+
+  const { data: candidate, error: fetchError } = await supabase
+    .from("candidates")
+    .select("id, dnh_flag")
+    .eq("id", candidateId)
+    .single();
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message };
+  }
+
+  if (candidate.dnh_flag) {
+    return { 
+      success: false, 
+      error: "Candidate is marked as Do Not Hire (DNH). Resume updates are prohibited." 
+    };
+  }
+
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+    pending_resume: false,
+  };
+
+  if (parsedData.firstName) updateData.first_name = parsedData.firstName;
+  if (parsedData.lastName) updateData.last_name = parsedData.lastName;
+  if (parsedData.email) updateData.email = parsedData.email;
+  if (parsedData.phone) updateData.phone = parsedData.phone;
+  if (parsedData.address) updateData.address = parsedData.address;
+  if (parsedData.primarySkills && parsedData.primarySkills.length > 0) {
+    updateData.primary_skills = parsedData.primarySkills.join(", ");
+  }
+  if (parsedData.fitSummary) updateData.ai_summary = parsedData.fitSummary;
+  if (typeof parsedData.fitRating === "number") updateData.fit_rating = parsedData.fitRating;
+  if (typeof parsedData.yearsOfExperience === "number") updateData.years_of_experience = parsedData.yearsOfExperience;
+  if (parsedData.work_experience) updateData.work_experience = parsedData.work_experience;
+
+  const { error: updateError } = await supabase
+    .from("candidates")
+    .update(updateData)
+    .eq("id", candidateId);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  const { error: logError } = await supabase.from("activity_logs").insert({
+    candidate_id: candidateId,
+    activity_type: "Resume Updated",
+    notes: "Resume updated and re-evaluated via Quick Add",
+    author_name: updatedBy || "Recruiter",
+    created_at: new Date().toISOString(),
+  });
+
+  if (logError) {
+    console.error("Failed to log activity:", logError);
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+
+  return { success: true, candidateId };
 }
