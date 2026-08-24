@@ -39,13 +39,13 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         items: { type: Type.STRING }
       },
       yearsOfExperience: { type: Type.NUMBER },
-      fitSummary: { 
-        type: Type.STRING, 
-        description: "Objective 2-sentence paragraph. State total years of experience first, flag the missing role-specific requirements in sentence 1, and justify the rating in sentence 2." 
+      fitSummary: {
+        type: Type.STRING,
+        description: "Objective 2-sentence paragraph. State total years of experience first, flag the missing role-specific requirements in sentence 1, and justify the rating in sentence 2."
       },
-      fitRating: { 
+      fitRating: {
         type: Type.NUMBER,
-        description: "1-5 stars (if mandatory core skills for the role are missing, cap the fitRating at a maximum of 2)."
+        description: "1-5 stars."
       },
       work_experience: {
         type: Type.ARRAY,
@@ -66,11 +66,13 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
   };
 
   let contents: any[];
-  
-  let instructions = "You are an expert technical recruiter. Parse the attached resume document and extract the candidate information according to the schema.";
-  
+
+  let instructions = "You are an objective talent acquisition specialist evaluating a candidate against a target Job Title and Job Description.";
+
   if (jobContext) {
-    instructions += `\n\nEvaluate the candidate strictly against the Target Job Description provided. Do NOT evaluate them for their past industry or unrelated strengths. If mandatory core skills for the role (e.g., training facilitation, onboarding, new hire orientation, required certifications) are missing, flag it immediately as a critical gap and cap the fitRating at a maximum of 2.\n\nJob Title: ${jobContext.title}\nJob Description: ${jobContext.description}\nJob Requirements: ${jobContext.requirements}`;
+    instructions += `\n\nTarget Job Title: ${jobContext.title}\nTarget Job Description: ${jobContext.description}\nTarget Job Requirements: ${jobContext.requirements}\n\nUNIVERSAL SCORING RUBRIC (1 to 5 Stars):\n- 5 Stars (Exceptional Fit): Meets or exceeds core requirements, demonstrates substantial direct experience in the target role functions, and holds all mandatory certifications or licenses.\n- 4 Stars (Strong Fit): Significant direct experience in the core functional duties with strong domain relevance; meets primary qualifications with only minor preference gaps.\n- 3 Stars (Moderate / High-Potential Fit): Strong transferable domain knowledge and functional track record, but requires obtaining or renewing specific secondary certifications, tools, or niche credentials. Do NOT hard-cap strong transferable candidates at 2 stars if they possess proven core competencies.\n- 2 Stars (Weak Fit): Related industry or adjacent domain background, but lacks direct experience in the primary functional responsibilities outlined in the job description.\n- 1 Star (Mismatch): Unrelated background or fails to meet baseline minimum qualifications.\n\nEVALUATION RULES:\n1. Dynamic Grounding: Base evaluations strictly on the provided Target Job Title and Target Job Description.\n2. Balanced Weighting: Distinguish between trainable/acquirable certifications vs. core functional experience. Award 3/5 to candidates who have strong practical experience in adjacent or foundational duties even if minor credentials must be acquired on the job.\n3. fitSummary Structure (Strictly 2 Sentences):\n   - Sentence 1: Summarize total years of relevant experience, noting core strengths and any missing requirements or credentials.\n   - Sentence 2: Provide an objective rationale explaining the rating and the exact gaps needed to reach full alignment.`;
+  } else {
+    instructions += "\n\nParse the attached resume document and extract the candidate information according to the schema.";
   }
 
   if (typeof payload === 'string') {
@@ -81,7 +83,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     // It's a File object
     const fileBase64 = Buffer.from(await payload.arrayBuffer()).toString('base64');
     const mimeType = payload.type || 'application/pdf'; // fallback to pdf
-    
+
     contents = [
       instructions,
       {
