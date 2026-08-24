@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
-import { quickAddSourcedCandidate } from "@/app/actions/candidates";
+import { quickAddSourcedCandidate, checkCandidateDuplicate } from "@/app/actions/candidates";
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { parseResumeAction } from "@/app/actions/resumeParser";
 import type { ParsedCandidate } from "@/lib/gemini/parser";
@@ -32,12 +32,15 @@ export function QuickAddSourcedModal({
   const [aiSummary, setAiSummary] = useState("");
   const [fitRating, setFitRating] = useState<number | null>(null);
   const [outreachNotes, setOutreachNotes] = useState("");
+  const [workExperience, setWorkExperience] = useState<Array<{ jobTitle: string; company: string; dates: string; summary: string }>>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [resume, setResume] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const [duplicateInfo, setDuplicateInfo] = useState<{isDuplicate: boolean; sameJob: boolean; existingRecord?: any} | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   const { activeRecruiter } = useRecruiter();
@@ -51,6 +54,27 @@ export function QuickAddSourcedModal({
         .catch(() => setJobs([]));
     }
   }, [open]);
+
+  useEffect(() => {
+    const checkDuplicate = async () => {
+      if (!email || !email.trim()) {
+        setDuplicateInfo(null);
+        return;
+      }
+      setIsCheckingDuplicate(true);
+      try {
+        const result = await checkCandidateDuplicate(email, targetJob);
+        setDuplicateInfo(result);
+      } catch (err) {
+        console.error("Duplicate check failed:", err);
+      } finally {
+        setIsCheckingDuplicate(false);
+      }
+    };
+
+    const timer = setTimeout(checkDuplicate, 500);
+    return () => clearTimeout(timer);
+  }, [email, targetJob]);
 
   if (!open) {
     return null;
@@ -75,10 +99,12 @@ export function QuickAddSourcedModal({
     setAiSummary("");
     setFitRating(null);
     setOutreachNotes("");
+    setWorkExperience([]);
     setResume(null);
     setDragging(false);
     setParsing(false);
     setError("");
+    setDuplicateInfo(null);
   }
 
   function applyParsedData(data: ParsedCandidate) {
@@ -97,6 +123,9 @@ export function QuickAddSourcedModal({
     }
     if (typeof data.yearsOfExperience === "number") {
       setYearsOfExperience(String(data.yearsOfExperience));
+    }
+    if (data.work_experience && Array.isArray(data.work_experience)) {
+      setWorkExperience(data.work_experience);
     }
     const notes = [summary, typeof data.fitRating === "number" ? `Fit Rating: ${data.fitRating}/5` : ""]
       .filter(Boolean)
@@ -166,6 +195,7 @@ export function QuickAddSourcedModal({
         ai_summary: aiSummary,
         fit_rating: fitRating,
         outreach_notes: outreachNotes,
+        work_experience: workExperience,
         author_name: activeRecruiter?.name || "Recruiter",
       });
       reset();
@@ -291,6 +321,26 @@ export function QuickAddSourcedModal({
                 </option>
               ))}
             </select>
+            {targetJob && (() => {
+              const selected = jobs.find((j) => j.id === targetJob);
+              if (!selected?.description?.trim()) {
+                return (
+                  <div className="mt-1 rounded-md bg-amber-50 p-2 border border-amber-200">
+                    <p className="text-sm text-amber-800">
+                      ⚠ Selected job opening has no job description. Please add a description under Job Settings before parsing resumes.
+                    </p>
+                  </div>
+                );
+              }
+              const words = selected.description.trim().split(/\s+/).length;
+              return (
+                <div className="mt-1 rounded-md bg-emerald-50 p-2 border border-emerald-200">
+                  <p className="text-sm text-emerald-800">
+                    ✓ Job Context Attached: {selected.title} ({words} words)
+                  </p>
+                </div>
+              );
+            })()}
           </label>
 
           <label className="flex flex-col gap-1.5">
@@ -370,18 +420,26 @@ export function QuickAddSourcedModal({
           <div
             className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-sm ${
               dragging ? "border-secondary bg-secondary/10" : "border-slate-300"
-            } ${parsing ? "opacity-60" : ""}`}
+            } ${parsing ? "opacity-60" : ""} ${(!targetJob || !jobs.find((j) => j.id === targetJob)?.description?.trim()) ? "opacity-50 cursor-not-allowed bg-slate-50" : "cursor-pointer"}`}
             onDragOver={(e) => {
               e.preventDefault();
-              setDragging(true);
+              if (targetJob && jobs.find((j) => j.id === targetJob)?.description?.trim()) {
+                setDragging(true);
+              }
             }}
             onDragLeave={() => setDragging(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              handleFile(e.dataTransfer.files?.[0]);
+              if (targetJob && jobs.find((j) => j.id === targetJob)?.description?.trim()) {
+                handleFile(e.dataTransfer.files?.[0]);
+              }
             }}
-            onClick={() => !parsing && fileInputRef.current?.click()}
+            onClick={() => {
+              if (!parsing && targetJob && jobs.find((j) => j.id === targetJob)?.description?.trim()) {
+                fileInputRef.current?.click();
+              }
+            }}
           >
             {parsing ? (
               <>
@@ -417,14 +475,26 @@ export function QuickAddSourcedModal({
 
           {error && <p className="text-sm text-danger">{error}</p>}
 
+          {duplicateInfo?.isDuplicate && duplicateInfo.sameJob && (
+            <div className="rounded-md bg-amber-50 p-3 border border-amber-200 text-sm text-amber-800">
+              ⚠️ Existing Candidate: This candidate already exists in this job opening at the {duplicateInfo.existingRecord?.pipeline_stage?.replace(/_/g, ' ') || 'unknown'} stage.
+            </div>
+          )}
+
+          {duplicateInfo?.isDuplicate && !duplicateInfo.sameJob && (
+            <div className="rounded-md bg-blue-50 p-3 border border-blue-200 text-sm text-blue-800">
+              ℹ️ Returning Applicant: Previously applied for another position on {new Date(duplicateInfo.existingRecord?.created_at).toLocaleDateString()}.
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               type="button"
               className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               onClick={handleSubmit}
-              disabled={saving}
+              disabled={saving || isCheckingDuplicate || (duplicateInfo?.isDuplicate && duplicateInfo.sameJob)}
             >
-              {saving ? "Saving..." : "Add Candidate"}
+              {saving ? "Saving..." : isCheckingDuplicate ? "Checking..." : "Add Candidate"}
             </button>
             <button
               type="button"

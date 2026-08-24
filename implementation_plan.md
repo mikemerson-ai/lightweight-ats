@@ -59,6 +59,8 @@ This implementation plan breaks down the development of the Lightweight ATS into
   - AI Fit Summary card rendering Gemini-generated bio summary, primary skills tags, years of experience, and suggested role fit.
   - Compliance Checklist tab with required status badges, and Activity Timeline tab reading `activity_logs`.
   - Thread `onSelect` through `KanbanColumn`/`KanbanCard` state so clicking a card slides the drawer open.
+- [x] **Task 4.4: Enforce Job Description Context Pipeline & Pre-flight UI Validation**
+  - Prevent AI context starvation by mandating valid job descriptions, blocking uploads for empty descriptions, showing UI badge/warning states, and halting backend parsing if job context is missing.
 
 ---
 

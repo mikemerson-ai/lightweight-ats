@@ -49,6 +49,7 @@
 
 ### Feature 4: AI Multi-Document Parsing, Smart Auto-Merge & Manual Editing
 - [ ] **Multi-Document Extraction:** Upload PDF Resumes or Application Forms via **Gemini 2.5 Flash API**.
+- [ ] **Enforce Job Description Context Pipeline & Pre-flight UI Validation:** Prevent AI context starvation by mandating valid job descriptions, blocking uploads for empty descriptions, showing UI badge/warning states, and halting backend parsing if job context is missing.
 - [ ] **Auto-Append Logic:** If a parsed field (e.g., Middle Name, References, Driver's License #) is blank in the current database profile, auto-fill it instantly without recruiter prompt.
 - [ ] **Field Conflict Review Modal:** If an uploaded document (e.g., Application Form) contains data that differs from existing database records:
   - Present a side-by-side comparison modal displaying **Current Profile Data** vs. **New Document Data**.

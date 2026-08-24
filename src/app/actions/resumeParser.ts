@@ -2,7 +2,7 @@
 
 import mammoth from 'mammoth';
 import { parseResumeData, ParsedCandidate, JobContext } from '@/lib/gemini/parser';
-import { getJobById } from '@/app/actions/jobs';
+import { createClient } from '@/lib/supabase/server';
 
 export interface ParseResumeResult {
   success: boolean;
@@ -22,14 +22,22 @@ export async function parseResumeAction(formData: FormData): Promise<ParseResume
 
     let jobContext: JobContext | undefined;
     if (jobId) {
-      const job = await getJobById(jobId);
-      if (job) {
-        jobContext = {
-          title: job.title,
-          description: job.description,
-          requirements: job.requirements,
-        };
+      const supabase = await createClient();
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('title, description, requirements')
+        .eq('id', jobId)
+        .single();
+        
+      if (error || !job || !job.description || job.description.trim().length === 0) {
+        return { success: false, error: 'Job context missing or empty. Cannot parse resume without a valid job description.' };
       }
+
+      jobContext = {
+        title: job.title,
+        description: job.description,
+        requirements: job.requirements || '',
+      };
     }
 
     let payload: File | string;

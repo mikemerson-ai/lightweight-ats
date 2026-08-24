@@ -18,9 +18,14 @@ export interface ParsedCandidate {
   yearsOfExperience: number;
   fitSummary: string;
   fitRating: number;
+  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
 }
 
 export async function parseResumeData(payload: File | string, jobContext?: JobContext): Promise<ParsedCandidate> {
+  if (!jobContext?.title || !jobContext?.description || jobContext.description.trim().length === 0) {
+    throw new Error("FATAL: Missing jobTitle or jobDescription in parseResume.");
+  }
+
   const schema = {
     type: Type.OBJECT,
     properties: {
@@ -36,11 +41,25 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
       yearsOfExperience: { type: Type.NUMBER },
       fitSummary: { 
         type: Type.STRING, 
-        description: "Objective 2-sentence paragraph. State total years of experience first. Immediately flag any missing mandatory skills or gaps. Briefly explain the rating." 
+        description: "Objective 2-sentence paragraph. State total years of experience first, flag the missing role-specific requirements in sentence 1, and justify the rating in sentence 2." 
       },
       fitRating: { 
         type: Type.NUMBER,
-        description: "1-5 stars (5 = exact keyword matches and mandatory requirements met; weigh transferable skills favorably)."
+        description: "1-5 stars (if mandatory core skills for the role are missing, cap the fitRating at a maximum of 2)."
+      },
+      work_experience: {
+        type: Type.ARRAY,
+        description: "Extract up to 3 of the most relevant past work experiences. Prioritize roles relevant to the Target Job Description; if none are relevant, use the 3 most recent. Summarize the duties into a concise 1-2 sentence overview.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            jobTitle: { type: Type.STRING },
+            company: { type: Type.STRING },
+            dates: { type: Type.STRING },
+            summary: { type: Type.STRING }
+          },
+          required: ["jobTitle", "company", "dates", "summary"]
+        }
       }
     },
     required: ["firstName", "lastName", "email", "phone", "address", "primarySkills", "yearsOfExperience", "fitSummary", "fitRating"]
@@ -51,7 +70,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
   let instructions = "You are an expert technical recruiter. Parse the attached resume document and extract the candidate information according to the schema.";
   
   if (jobContext) {
-    instructions += `\n\nEvaluate the candidate strictly against the Job Title and Description.\n\nJob Title: ${jobContext.title}\nJob Description: ${jobContext.description}\nJob Requirements: ${jobContext.requirements}`;
+    instructions += `\n\nEvaluate the candidate strictly against the Target Job Description provided. Do NOT evaluate them for their past industry or unrelated strengths. If mandatory core skills for the role (e.g., training facilitation, onboarding, new hire orientation, required certifications) are missing, flag it immediately as a critical gap and cap the fitRating at a maximum of 2.\n\nJob Title: ${jobContext.title}\nJob Description: ${jobContext.description}\nJob Requirements: ${jobContext.requirements}`;
   }
 
   if (typeof payload === 'string') {

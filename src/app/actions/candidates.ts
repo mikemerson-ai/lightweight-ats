@@ -46,6 +46,7 @@ export interface QuickAddSourcedCandidateInput {
   date_sourced?: string;
   author_name?: string;
   address?: string;
+  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
 }
 
 export interface Candidate {
@@ -76,6 +77,7 @@ export interface Candidate {
   dnh_recruiter?: string | null;
   jobs: { title: string } | null;
   address?: string;
+  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
 }
 
 export interface ActivityLogEntry {
@@ -154,6 +156,41 @@ export async function searchCandidates(query: string): Promise<Candidate[]> {
   return (data as Candidate[]) ?? [];
 }
 
+export async function checkCandidateDuplicate(
+  email: string,
+  targetJobId?: string
+): Promise<{
+  isDuplicate: boolean;
+  sameJob: boolean;
+  existingRecord?: Partial<Candidate>;
+}> {
+  const supabase = await createClient();
+
+  if (!email || !email.trim()) {
+    return { isDuplicate: false, sameJob: false };
+  }
+
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at")
+    .ilike("email", email.trim())
+    .order("created_at", { ascending: false });
+
+  if (error || !data || data.length === 0) {
+    return { isDuplicate: false, sameJob: false };
+  }
+
+  const sameJobRecord = targetJobId
+    ? data.find((c) => c.job_id === targetJobId)
+    : undefined;
+
+  return {
+    isDuplicate: true,
+    sameJob: !!sameJobRecord,
+    existingRecord: sameJobRecord || data[0],
+  };
+}
+
 export async function quickAddSourcedCandidate(
   data: QuickAddSourcedCandidateInput,
 ): Promise<Candidate> {
@@ -180,11 +217,15 @@ export async function quickAddSourcedCandidate(
       date_applied: data.date_applied,
       date_sourced: data.date_sourced,
       address: data.address,
+      work_experience: data.work_experience ?? [],
     })
     .select("*, jobs(title)")
     .single();
 
   if (error) {
+    if (error.code === "23505") {
+      throw new Error("A candidate with this email already exists.");
+    }
     throw new Error(error.message);
   }
 

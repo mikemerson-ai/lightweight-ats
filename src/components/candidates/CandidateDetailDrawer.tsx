@@ -257,7 +257,7 @@ export function CandidateDetailDrawer({
   const [documents, setDocuments] = useState<CandidateDocument[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [activeTab, setActiveTab] = useState<
-    "compliance" | "activity" | "evaluations"
+    "compliance" | "activity" | "evaluations" | "experience"
   >("activity");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -491,7 +491,7 @@ export function CandidateDetailDrawer({
         onClick={onClose}
       />
       {candidate && (
-        <aside className="absolute right-0 top-0 h-full w-full max-w-md translate-x-0 bg-white shadow-lg flex flex-col">
+        <aside className="absolute right-0 top-0 h-full w-full max-w-2xl translate-x-0 bg-white shadow-lg flex flex-col">
           <div className="flex flex-col gap-0 bg-primary px-6 py-5 text-white">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">{candidate.first_name} {candidate.last_name}</h2>
@@ -802,13 +802,13 @@ export function CandidateDetailDrawer({
                 <button
                   type="button"
                   className={`text-sm font-medium pb-1 ${
-                    activeTab === "compliance"
+                    activeTab === "experience"
                       ? "text-primary border-b-2 border-primary"
                       : "text-slate-500"
                   }`}
-                  onClick={() => setActiveTab("compliance")}
+                  onClick={() => setActiveTab("experience")}
                 >
-                  Compliance Checklist
+                  Experience
                 </button>
                 <button
                   type="button"
@@ -820,6 +820,17 @@ export function CandidateDetailDrawer({
                   onClick={() => setActiveTab("evaluations")}
                 >
                   Evaluations
+                </button>
+                <button
+                  type="button"
+                  className={`text-sm font-medium pb-1 ${
+                    activeTab === "compliance"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-slate-500"
+                  }`}
+                  onClick={() => setActiveTab("compliance")}
+                >
+                  Compliance Checklist
                 </button>
               </div>
 
@@ -955,6 +966,29 @@ export function CandidateDetailDrawer({
                   ) : (
                     <p className="text-sm text-slate-400">
                       No evaluations submitted yet for this candidate.
+                    </p>
+                  )}
+                </div>
+              ) : activeTab === "experience" ? (
+                <div className="mt-3 flex flex-col gap-4">
+                  {candidate.work_experience && candidate.work_experience.length > 0 ? (
+                    <div className="relative border-l-2 border-slate-200 ml-3 pl-5 space-y-6">
+                      {candidate.work_experience.map((exp, idx) => (
+                        <div key={idx} className="relative">
+                          <div className="absolute -left-[29px] top-1 h-3 w-3 rounded-full border-2 border-white bg-primary"></div>
+                          <h4 className="text-sm font-semibold text-primary">{exp.jobTitle}</h4>
+                          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-1.5">
+                            <span>{exp.company}</span>
+                            <span>•</span>
+                            <span>{exp.dates}</span>
+                          </div>
+                          <p className="text-sm text-slate-700">{exp.summary}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      No parsed experience available.
                     </p>
                   )}
                 </div>
