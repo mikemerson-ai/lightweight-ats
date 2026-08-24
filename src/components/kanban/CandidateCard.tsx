@@ -22,10 +22,10 @@ function formatOriginDate(dateStr?: string | null): string {
 }
 
 export function sourceBadgeLabel(candidate: Candidate): string {
-  if (candidate.source_type === "outbound" || candidate.source_type === "sourced") {
-    return `Sourced${formatOriginDate(candidate.date_sourced)}`;
-  }
-  return `Applied${formatOriginDate(candidate.date_applied)}`;
+  let channel = candidate.source_channel || (candidate.source_type === "outbound" || candidate.source_type === "sourced" ? "Sourced" : "Applied");
+  if (channel === "LinkedIn Recruiter" || channel === "LinkedIn InMail") channel = "LinkedIn";
+  if (channel === "Indeed Resume Database" || channel === "Indeed Resume") channel = "Indeed";
+  return channel;
 }
 
 const BADGE_STYLES: Record<SourceBadgeVariant, string> = {
@@ -77,9 +77,21 @@ export function CandidateCard({
         <span className="text-sm font-semibold text-primary">
           {candidate.first_name} {candidate.last_name}
         </span>
-        <span className={BADGE_STYLES[badgeVariant]}>
-          {sourceBadgeLabel(candidate)}
-        </span>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className={BADGE_STYLES[badgeVariant]}>
+            {sourceBadgeLabel(candidate)}
+          </span>
+          {candidate.dnh_flag && (
+            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 border border-red-200">
+              DNH
+            </span>
+          )}
+          {candidate.pending_resume && (
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
+              Pending Resume
+            </span>
+          )}
+        </div>
       </div>
       <div className="mt-2 text-xs text-slate-500">
         {candidate.jobs?.title ?? "No job assigned"}

@@ -143,7 +143,7 @@ export function QuickAddSourcedModal({
         last_name: lastName,
         source_channel: sourceChannel,
         source_type: candidateOrigin,
-        pending_resume: candidateOrigin === "sourced",
+        pending_resume: !resume,
         date_applied: candidateOrigin === "applied" ? eventDate : undefined,
         date_sourced: candidateOrigin === "sourced" ? eventDate : undefined,
         job_id: targetJob,
@@ -171,7 +171,7 @@ export function QuickAddSourcedModal({
   }
 
   const inputClass =
-    "w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 font-normal focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors";
+    "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 font-medium placeholder:text-slate-400 focus:border-secondary focus:ring-1 focus:ring-secondary focus:outline-none transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

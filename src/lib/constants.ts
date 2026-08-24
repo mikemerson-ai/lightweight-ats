@@ -1,16 +1,15 @@
 export const SOURCING_CHANNELS = [
   "LinkedIn",
   "Indeed",
-  "Internal Database",
-  "Other",
+  "Employee Referral",
+  "Headhunter / Agency",
+  "Talent Pool Rediscovery",
 ] as const;
 
 export const APPLIED_CHANNELS = [
-  "Company Careers Page",
-  "Indeed Apply",
-  "LinkedIn Apply",
-  "Direct Referral",
-  "Other",
+  "Job Board / Career Site",
+  "Application Form",
+  "Walk-in",
 ] as const;
 
 export type SourcingChannel = string;

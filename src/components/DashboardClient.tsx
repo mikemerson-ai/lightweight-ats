@@ -7,7 +7,8 @@ import { QuickAddSourcedModal } from "./modals/QuickAddSourcedModal";
 import { CreateJobModal } from "./modals/CreateJobModal";
 import { EditJobModal } from "./modals/EditJobModal";
 import { KanbanBoard } from "./kanban/KanbanBoard";
-import { Pencil, Trash2, AlertCircle } from "lucide-react";
+import { AnalyticsModal } from "./analytics/AnalyticsModal";
+import { Pencil, Trash2, AlertCircle, BarChart3 } from "lucide-react";
 import RecruiterSwitcher from "./layout/RecruiterSwitcher";
 
 export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
@@ -20,6 +21,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteCascadePrompt, setDeleteCascadePrompt] = useState(false);
@@ -123,6 +125,16 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
           </button>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setAnalyticsOpen(true)}
+            className="p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors flex items-center gap-2"
+            title="Analytics"
+          >
+            <BarChart3 className="w-5 h-5" />
+            <span className="text-sm font-medium hidden sm:inline-block">Analytics</span>
+          </button>
+          <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
           <RecruiterSwitcher />
           <SearchBar />
           <select
@@ -176,6 +188,13 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
         job={selectedJob}
         onClose={() => setEditJobOpen(false)}
         onJobUpdated={handleJobUpdated}
+      />
+
+      <AnalyticsModal
+        open={analyticsOpen}
+        onClose={() => setAnalyticsOpen(false)}
+        jobs={jobs}
+        initialJobId={selectedJobId}
       />
 
       {/* Delete Confirmation Modal */}

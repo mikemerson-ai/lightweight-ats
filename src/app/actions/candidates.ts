@@ -1,8 +1,29 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import type { CandidateDocument } from "@/types/documents";
 
 import { SourcingChannel } from "@/lib/constants";
+
+const HIRED_STAGE = "hired";
+const DISQUALIFIED_STAGE = "disqualified";
+
+const DISQUALIFICATION_REASONS = [
+  "Did not meet requirements",
+  "Missing qualifications",
+  "Salary Mismatch",
+  "Location/Commute",
+  "Other",
+];
+
+export interface StageTransitionResult {
+  success: boolean;
+  blocked?: boolean;
+  missingDocs?: string[];
+  expiredDocs?: string[];
+  error?: string;
+}
 
 export interface QuickAddSourcedCandidateInput {
   first_name: string;
@@ -48,6 +69,10 @@ export interface Candidate {
   updated_at: string;
   date_applied?: string;
   date_sourced?: string;
+  dnh_flag?: boolean;
+  dnh_reason?: string | null;
+  dnh_date?: string | null;
+  dnh_recruiter?: string | null;
   jobs: { title: string } | null;
 }
 
@@ -209,12 +234,42 @@ export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
 
 export async function updateCandidateStage(
   candidateId: string,
-  stage: string,
+  newStage: string,
   disqualificationReason?: string,
-): Promise<void> {
+  recruiterName?: string,
+): Promise<StageTransitionResult> {
   const supabase = await createClient();
 
-  const updateData: any = { pipeline_stage: stage };
+  if (newStage === HIRED_STAGE) {
+    const guardrail = await checkHiredGuardrail(supabase, candidateId);
+    if (!guardrail.compliant) {
+      return {
+        success: false,
+        blocked: true,
+        missingDocs: guardrail.missingDocs,
+        expiredDocs: guardrail.expiredDocs,
+      };
+    }
+  }
+
+  if (newStage === DISQUALIFIED_STAGE) {
+    if (!disqualificationReason || !disqualificationReason.trim()) {
+      return {
+        success: false,
+        blocked: false,
+        error: "A disqualification reason is required to reject a candidate.",
+      };
+    }
+    if (!DISQUALIFICATION_REASONS.includes(disqualificationReason)) {
+      return {
+        success: false,
+        blocked: false,
+        error: `Invalid disqualification reason: "${disqualificationReason}".`,
+      };
+    }
+  }
+
+  const updateData: any = { pipeline_stage: newStage };
 
   const { error } = await supabase
     .from("candidates")
@@ -222,21 +277,87 @@ export async function updateCandidateStage(
     .eq("id", candidateId);
 
   if (error) {
-    throw new Error(error.message);
+    return {
+      success: false,
+      blocked: false,
+      error: error.message,
+    };
   }
 
-  let notes = `Moved to ${stage}`;
-  if (stage === "disqualified" && disqualificationReason) {
-    notes += `. Reason: ${disqualificationReason}`;
-  } else if (disqualificationReason) {
-    notes += `. Reason: ${disqualificationReason}`;
+  let notes = `Moved to ${newStage}`;
+  if (newStage === DISQUALIFIED_STAGE && disqualificationReason) {
+    notes = `Disqualified. Reason: ${disqualificationReason}`;
   }
 
-  await supabase.from("activity_logs").insert({
+  const { error: logError } = await supabase.from("activity_logs").insert({
     candidate_id: candidateId,
-    activity_type: "Stage Change",
-    notes: notes,
+    activity_type:
+      newStage === DISQUALIFIED_STAGE ? "Disqualified" : "Stage Change",
+    notes,
+    author_name: recruiterName || "Recruiter",
   });
+
+  if (logError) {
+    return {
+      success: false,
+      blocked: false,
+      error: logError.message,
+    };
+  }
+
+  revalidatePath("/");
+
+  return { success: true, blocked: false };
+}
+
+interface HiredGuardrailResult {
+  compliant: boolean;
+  missingDocs: string[];
+  expiredDocs: string[];
+}
+
+async function checkHiredGuardrail(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  candidateId: string,
+): Promise<HiredGuardrailResult> {
+  const { data, error } = await supabase
+    .from("candidate_documents")
+    .select("*")
+    .eq("candidate_id", candidateId);
+
+  if (error) {
+    return {
+      compliant: false,
+      missingDocs: [error.message],
+      expiredDocs: [],
+    };
+  }
+
+  const documents = (data as CandidateDocument[]) ?? [];
+  const now = new Date();
+  const missingDocs: string[] = [];
+  const expiredDocs: string[] = [];
+
+  for (const doc of documents) {
+    const isPending = doc.status === "Pending";
+    const isExpired = doc.status === "Expired";
+
+    if (isPending) {
+      missingDocs.push(`"${doc.document_name}" is pending`);
+    }
+
+    const expiredByDate =
+      doc.requires_expiration &&
+      !!doc.date_expired &&
+      new Date(doc.date_expired) < now;
+
+    if (isExpired || expiredByDate) {
+      expiredDocs.push(`"${doc.document_name}" is expired`);
+    }
+  }
+
+  const compliant = missingDocs.length === 0 && expiredDocs.length === 0;
+  return { compliant, missingDocs, expiredDocs };
 }
 
 export async function checkCandidateCompliance(
@@ -274,4 +395,56 @@ export async function deleteCandidate(candidateId: string): Promise<void> {
   
   const { revalidatePath } = await import("next/cache");
   revalidatePath("/");
+}
+
+export async function setCandidateDNHStatus(
+  candidateId: string,
+  dnhData: { dnh_flag: boolean; dnh_reason?: string; dnh_date?: string; dnh_recruiter?: string; }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("candidates")
+    .update({
+      dnh_flag: dnhData.dnh_flag,
+      dnh_reason: dnhData.dnh_reason || null,
+      dnh_date: dnhData.dnh_date || null,
+      dnh_recruiter: dnhData.dnh_recruiter || null,
+    })
+    .eq("id", candidateId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+
+  return { success: true };
+}
+
+export async function addCandidateNote(
+  candidateId: string,
+  noteText: string,
+  authorName: string,
+  activityType: string = "Note"
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("activity_logs").insert({
+    candidate_id: candidateId,
+    activity_type: activityType,
+    notes: noteText,
+    author_name: authorName,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+
+  return { success: true };
 }

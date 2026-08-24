@@ -5,7 +5,6 @@ import { type DragEndEvent } from "@dnd-kit/core";
 import {
   getCandidatesByJob,
   updateCandidateStage,
-  checkCandidateCompliance,
   type Candidate,
 } from "@/app/actions/candidates";
 import { DndContextWrapper } from "./DndContextWrapper";
@@ -158,25 +157,24 @@ export function KanbanBoard({
   }
 
   async function handleStageChange(candidate: Candidate, targetId: string) {
-    const sourceId = candidate.pipeline_stage || "new_application";
-
-    if (targetId === "hired") {
-      try {
-        const check = await checkCandidateCompliance(candidate.id);
-        if (!check.compliant) {
-          setMissingComplianceItems(check.missing_items || []);
-          setComplianceModalOpen(true);
-          return;
-        }
-      } catch (err) {
-        console.error("Compliance check failed", err);
-        return;
-      }
-    }
-
     if (targetId === "disqualified") {
       setCandidateToDisqualify(candidate);
       setDisqualifyModalOpen(true);
+      return;
+    }
+
+    const result = await updateCandidateStage(candidate.id, targetId);
+
+    if (!result.success) {
+      if (result.blocked) {
+        setMissingComplianceItems([
+          ...(result.missingDocs ?? []),
+          ...(result.expiredDocs ?? []),
+        ]);
+        setComplianceModalOpen(true);
+      } else if (result.error) {
+        alert(result.error);
+      }
       return;
     }
 
@@ -188,27 +186,28 @@ export function KanbanBoard({
     if (selectedCandidate?.id === candidate.id) {
       setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: targetId } : null);
     }
-
-    try {
-      await updateCandidateStage(candidate.id, targetId);
-    } catch (err) {
-      setCandidates((prev) =>
-        prev.map((c) =>
-          c.id === candidate.id ? { ...c, pipeline_stage: sourceId } : c,
-        ),
-      );
-      if (selectedCandidate?.id === candidate.id) {
-        setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: sourceId } : null);
-      }
-    }
   }
 
   async function handleDisqualifyConfirm(reason: string) {
     if (!candidateToDisqualify) return;
     
     const moved = candidateToDisqualify;
-    const sourceId = moved.pipeline_stage || "new_application";
     const targetId = "disqualified";
+
+    setDisqualifyModalOpen(false);
+    setCandidateToDisqualify(null);
+
+    const result = await updateCandidateStage(
+      moved.id,
+      targetId,
+      reason,
+    );
+
+    if (!result.success) {
+      console.error("Disqualify failed:", result.error);
+      alert("Disqualify failed: " + (result.error ?? "Unknown error"));
+      return;
+    }
 
     setCandidates((prev) =>
       prev.map((c) =>
@@ -217,24 +216,6 @@ export function KanbanBoard({
     );
     if (selectedCandidate?.id === moved.id) {
       setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: targetId } : null);
-    }
-
-    setDisqualifyModalOpen(false);
-    setCandidateToDisqualify(null);
-
-    try {
-      await updateCandidateStage(moved.id, targetId, reason);
-    } catch (err) {
-      console.error("Disqualify failed:", err);
-      alert("Disqualify failed: " + String(err));
-      setCandidates((prev) =>
-        prev.map((c) =>
-          c.id === moved.id ? { ...c, pipeline_stage: sourceId } : c,
-        ),
-      );
-      if (selectedCandidate?.id === moved.id) {
-        setSelectedCandidate((prev) => prev ? { ...prev, pipeline_stage: sourceId } : null);
-      }
     }
   }
 

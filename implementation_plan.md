@@ -39,7 +39,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
   - Build `CandidateCard.tsx` with source badges (`[LinkedIn]`, `[Indeed]`, `[Direct App]`) and drag hooks.
   - Build `KanbanColumn.tsx` droppable containers for all 8 pipeline stages.
   - Build main `KanbanBoard.tsx` with top-level source channel filter dropdown.
-- [ ] **Task 3.3: "Hired" Stage Guardrail & Disqualification Workflow**
+- [x] **Task 3.3: "Hired" Stage Guardrail & Disqualification Workflow**
   - Implement compliance check function on `onDragEnd` to block movement to "Hired" if checklist items are missing or expired.
   - Build `DisqualificationModal.tsx` prompting for categorized rejection reasons (*Did not meet requirements*, *Missing qualifications*, *Salary Mismatch*, *Location/Commute*, *Other*).
 
@@ -65,10 +65,10 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ## Phase 5: Profile Drawer, Document Compliance & Scorecards
 - [ ] **Task 5.1: Candidate Profile Drawer & In-Line Editing**
   - Build slide-out `CandidateDrawer.tsx` with tabbed navigation and full field editability.
-- [ ] **Task 5.2: Categorized Document Checklist & Expiration Tracker**
+- [x] **Task 5.2: Categorized Document Checklist & Expiration Tracker**
   - Build `DocumentChecklistTab.tsx` grouped by category (*Onboarding Records*, *Compliance*, *Security*, *Medical*, *Training*).
   - Add fields for SharePoint 201 URLs, Date Issued, and Expiration Dates with active alerts for TB, Physicals, IDs, Background Check renewals, and CPR.
-- [ ] **Task 5.3: DNH Warning Banner & Centralized Activity Stream**
+- [x] **Task 5.3: DNH Warning Banner & Centralized Activity Stream**
   - Implement red warning banner for candidates tagged as `Do-Not-Hire` or `Rehire`.
   - Build `ActivityStream.tsx` logging recruiter outreach notes, call logs, and stage change history.
 - [ ] **Task 5.4: Custom Scorecards & Evaluations**
@@ -77,7 +77,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ---
 
 ## Phase 6: Recruitment Analytics Dashboard & Vercel Deployment
-- [ ] **Task 6.1: Analytics Dashboard View**
+- [x] **Task 6.1: Analytics Dashboard View**
   - Build summary KPI cards (Total Applicants, Active Candidates, Disqualified Count, Open Reqs).
   - Build pipeline funnel charts and sourcing channel performance charts using `recharts`.
   - Build Compliance Expiration Alert widget highlighting items expiring within 30 days.
