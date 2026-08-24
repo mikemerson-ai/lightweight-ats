@@ -81,35 +81,41 @@ export function KanbanBoard({
 
   const loading = Boolean(jobId && loadedJobId !== jobId);
 
-  const filtered = candidates.filter((candidate) => {
-    if (sourceFilter !== "all") {
-      const sourceType =
-        candidate.source_type ||
-        (candidate.source_channel === "Employee Referral"
-          ? "outbound"
-          : "inbound");
-      if (sourceType !== sourceFilter) {
-        return false;
+  const filtered = candidates
+    .filter((candidate) => {
+      if (sourceFilter !== "all") {
+        const sourceType =
+          candidate.source_type ||
+          (candidate.source_channel === "Employee Referral"
+            ? "outbound"
+            : "inbound");
+        if (sourceType !== sourceFilter) {
+          return false;
+        }
       }
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      const haystack = [
-        candidate.first_name,
-        candidate.last_name,
-        candidate.email,
-        candidate.primary_skills,
-        candidate.status_tag,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) {
-        return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const haystack = [
+          candidate.first_name,
+          candidate.last_name,
+          candidate.email,
+          candidate.primary_skills,
+          candidate.status_tag,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) {
+          return false;
+        }
       }
-    }
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      const dateA = a.date_applied || a.date_sourced || a.created_at;
+      const dateB = b.date_applied || b.date_sourced || b.created_at;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
 
   function groupByStage(): Record<string, Candidate[]> {
     const grouped: Record<string, Candidate[]> = {};
