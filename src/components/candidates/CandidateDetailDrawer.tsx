@@ -752,7 +752,7 @@ export function CandidateDetailDrawer({
                       className={`h-5 w-5 ${
                         i < candidate.fit_rating!
                           ? "fill-amber-500 text-amber-500"
-                          : "text-slate-300 dark:text-slate-600"
+                          : "text-slate-300"
                       }`}
                     />
                   ))}
@@ -762,7 +762,7 @@ export function CandidateDetailDrawer({
                 </div>
               )}
 
-              <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
+              <p className="mt-3 text-sm text-slate-700">
                 {candidate.ai_summary || "No AI summary available for this candidate yet."}
               </p>
               {candidate.years_of_experience != null &&
@@ -990,7 +990,7 @@ export function CandidateDetailDrawer({
                           setNewDocRequiresExpiration(selectedDoc.requiresExpiration);
                         }
                       }}
-                      className="mt-2 w-full appearance-none rounded-md px-3 py-1.5 text-sm outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="mt-2 w-full appearance-none rounded-md px-3 py-1.5 text-sm outline-none cursor-pointer text-slate-900 font-medium bg-white border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     >
                       {STANDARD_COMPLIANCE_DOCUMENTS.map((doc) => (
                         <option key={doc.name} value={doc.name}>

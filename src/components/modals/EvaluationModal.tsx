@@ -122,7 +122,7 @@ export function EvaluationModal({
   }
 
   const inputClass =
-    "w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors";
+    "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 font-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
