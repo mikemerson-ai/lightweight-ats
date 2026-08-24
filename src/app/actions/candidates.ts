@@ -36,7 +36,7 @@ export interface QuickAddSourcedCandidateInput {
   primary_skills?: string;
   years_of_experience?: number | null;
   ai_summary?: string | null;
-  suggested_role_fit?: string | null;
+  fit_rating?: number | null;
   outreach_notes?: string;
   notes?: string;
   linkedin_url?: string;
@@ -65,7 +65,7 @@ export interface Candidate {
   linkedin_url?: string;
   years_of_experience?: number | null;
   ai_summary?: string | null;
-  suggested_role_fit?: string | null;
+  fit_rating?: number | null;
   created_at: string;
   updated_at: string;
   date_applied?: string;
@@ -175,7 +175,7 @@ export async function quickAddSourcedCandidate(
       primary_skills: data.primary_skills,
       years_of_experience: data.years_of_experience,
       ai_summary: data.ai_summary,
-      suggested_role_fit: data.suggested_role_fit,
+      fit_rating: data.fit_rating,
       pending_resume: data.pending_resume ?? true,
       date_applied: data.date_applied,
       date_sourced: data.date_sourced,

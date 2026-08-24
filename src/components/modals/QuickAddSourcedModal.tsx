@@ -30,7 +30,7 @@ export function QuickAddSourcedModal({
   const [primarySkills, setPrimarySkills] = useState("");
   const [yearsOfExperience, setYearsOfExperience] = useState("");
   const [aiSummary, setAiSummary] = useState("");
-  const [suggestedRoleFit, setSuggestedRoleFit] = useState("");
+  const [fitRating, setFitRating] = useState<number | null>(null);
   const [outreachNotes, setOutreachNotes] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [resume, setResume] = useState<File | null>(null);
@@ -73,7 +73,7 @@ export function QuickAddSourcedModal({
     setPrimarySkills("");
     setYearsOfExperience("");
     setAiSummary("");
-    setSuggestedRoleFit("");
+    setFitRating(null);
     setOutreachNotes("");
     setResume(null);
     setDragging(false);
@@ -90,14 +90,15 @@ export function QuickAddSourcedModal({
     if (data.primarySkills?.length) {
       setPrimarySkills(data.primarySkills.join(", "));
     }
-    const summary = data.summary ?? "";
+    const summary = data.fitSummary ?? "";
     if (summary) setAiSummary(summary);
-    const roleFit = data.suggestedRoleFit ?? "";
-    if (roleFit) setSuggestedRoleFit(roleFit);
+    if (typeof data.fitRating === "number") {
+      setFitRating(data.fitRating);
+    }
     if (typeof data.yearsOfExperience === "number") {
       setYearsOfExperience(String(data.yearsOfExperience));
     }
-    const notes = [summary, roleFit ? `Suggested Role Fit: ${roleFit}` : ""]
+    const notes = [summary, typeof data.fitRating === "number" ? `Fit Rating: ${data.fitRating}/5` : ""]
       .filter(Boolean)
       .join("\n\n");
     if (notes) setOutreachNotes(notes);
@@ -119,6 +120,9 @@ export function QuickAddSourcedModal({
     try {
       const formData = new FormData();
       formData.set("file", file);
+      if (targetJob) {
+        formData.set("jobId", targetJob);
+      }
       const result = await parseResumeAction(formData);
       if (!result.success || !result.data) {
         setError(result.error ?? "AI could not parse this resume. Please fill the fields manually.");
@@ -160,7 +164,7 @@ export function QuickAddSourcedModal({
           ? Number(yearsOfExperience)
           : null,
         ai_summary: aiSummary,
-        suggested_role_fit: suggestedRoleFit,
+        fit_rating: fitRating,
         outreach_notes: outreachNotes,
         author_name: activeRecruiter?.name || "Recruiter",
       });

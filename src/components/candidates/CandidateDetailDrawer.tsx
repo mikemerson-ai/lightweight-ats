@@ -743,15 +743,28 @@ export function CandidateDetailDrawer({
               <h3 className="text-sm font-semibold text-primary">
                 AI Fit Summary
               </h3>
-              <p className="mt-3 text-sm text-slate-700">
+              
+              {candidate.fit_rating != null && (
+                <div className="mt-3 flex items-center gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`h-5 w-5 ${
+                        i < candidate.fit_rating!
+                          ? "fill-amber-500 text-amber-500"
+                          : "text-slate-300 dark:text-slate-600"
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-2 text-sm font-medium text-slate-700">
+                    {candidate.fit_rating}/5 Fit
+                  </span>
+                </div>
+              )}
+
+              <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
                 {candidate.ai_summary || "No AI summary available for this candidate yet."}
               </p>
-              {candidate.suggested_role_fit && (
-                <p className="mt-2 text-sm">
-                  <span className="font-medium text-primary">Suggested Role Fit:</span>{" "}
-                  <span className="text-slate-700">{candidate.suggested_role_fit}</span>
-                </p>
-              )}
               {candidate.years_of_experience != null &&
                 candidate.years_of_experience > 0 && (
                   <p className="mt-2 text-sm text-slate-500">

@@ -16,8 +16,8 @@ export interface ParsedCandidate {
   address: string;
   primarySkills: string[];
   yearsOfExperience: number;
-  summary: string;
-  suggestedRoleFit: string;
+  fitSummary: string;
+  fitRating: number;
 }
 
 export async function parseResumeData(payload: File | string, jobContext?: JobContext): Promise<ParsedCandidate> {
@@ -34,16 +34,16 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         items: { type: Type.STRING }
       },
       yearsOfExperience: { type: Type.NUMBER },
-      summary: { 
+      fitSummary: { 
         type: Type.STRING, 
-        description: "A concise 2-sentence bio of the candidate." 
+        description: "Objective 2-sentence paragraph. State total years of experience first. Immediately flag any missing mandatory skills or gaps. Briefly explain the rating." 
       },
-      suggestedRoleFit: { 
-        type: Type.STRING,
-        description: "A suggested role based on the candidate's skills and experience."
+      fitRating: { 
+        type: Type.NUMBER,
+        description: "1-5 stars (5 = exact keyword matches and mandatory requirements met; weigh transferable skills favorably)."
       }
     },
-    required: ["firstName", "lastName", "email", "phone", "address", "primarySkills", "yearsOfExperience", "summary", "suggestedRoleFit"]
+    required: ["firstName", "lastName", "email", "phone", "address", "primarySkills", "yearsOfExperience", "fitSummary", "fitRating"]
   };
 
   let contents: any[];
@@ -51,7 +51,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
   let instructions = "You are an expert technical recruiter. Parse the attached resume document and extract the candidate information according to the schema.";
   
   if (jobContext) {
-    instructions += `\n\nCompare the candidate's experience strictly against the provided job description and requirements. The 'summary' MUST be a 2-sentence candidate overview highlighting relevance to this specific role. The 'suggestedRoleFit' MUST be a fit level rating (e.g., 'Strong Fit', 'Moderate Fit', 'Skill Gap') plus a brief explanation of why.\n\nJob Title: ${jobContext.title}\nJob Description: ${jobContext.description}\nJob Requirements: ${jobContext.requirements}`;
+    instructions += `\n\nEvaluate the candidate strictly against the Job Title and Description.\n\nJob Title: ${jobContext.title}\nJob Description: ${jobContext.description}\nJob Requirements: ${jobContext.requirements}`;
   }
 
   if (typeof payload === 'string') {
