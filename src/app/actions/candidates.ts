@@ -45,6 +45,7 @@ export interface QuickAddSourcedCandidateInput {
   date_applied?: string;
   date_sourced?: string;
   author_name?: string;
+  address?: string;
 }
 
 export interface Candidate {
@@ -74,6 +75,7 @@ export interface Candidate {
   dnh_date?: string | null;
   dnh_recruiter?: string | null;
   jobs: { title: string } | null;
+  address?: string;
 }
 
 export interface ActivityLogEntry {
@@ -177,6 +179,7 @@ export async function quickAddSourcedCandidate(
       pending_resume: data.pending_resume ?? true,
       date_applied: data.date_applied,
       date_sourced: data.date_sourced,
+      address: data.address,
     })
     .select("*, jobs(title)")
     .single();
@@ -438,6 +441,35 @@ export async function addCandidateNote(
     author_name: authorName,
     created_at: new Date().toISOString(),
   });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+
+  return { success: true };
+}
+
+export async function updateCandidateProfile(
+  candidateId: string,
+  updateData: {
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    primary_skills?: string;
+    years_of_experience?: number | null;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("candidates")
+    .update({ ...updateData, updated_at: new Date().toISOString() })
+    .eq("id", candidateId);
 
   if (error) {
     return { success: false, error: error.message };

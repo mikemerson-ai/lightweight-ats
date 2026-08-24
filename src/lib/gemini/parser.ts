@@ -13,6 +13,7 @@ export interface ParsedCandidate {
   lastName: string;
   email: string;
   phone: string;
+  address: string;
   primarySkills: string[];
   yearsOfExperience: number;
   summary: string;
@@ -27,6 +28,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
       lastName: { type: Type.STRING },
       email: { type: Type.STRING },
       phone: { type: Type.STRING },
+      address: { type: Type.STRING },
       primarySkills: {
         type: Type.ARRAY,
         items: { type: Type.STRING }
@@ -41,7 +43,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         description: "A suggested role based on the candidate's skills and experience."
       }
     },
-    required: ["firstName", "lastName", "email", "phone", "primarySkills", "yearsOfExperience", "summary", "suggestedRoleFit"]
+    required: ["firstName", "lastName", "email", "phone", "address", "primarySkills", "yearsOfExperience", "summary", "suggestedRoleFit"]
   };
 
   let contents: any[];

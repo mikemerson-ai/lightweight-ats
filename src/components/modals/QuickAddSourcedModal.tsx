@@ -26,6 +26,7 @@ export function QuickAddSourcedModal({
   const [contactInfo, setContactInfo] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [primarySkills, setPrimarySkills] = useState("");
   const [yearsOfExperience, setYearsOfExperience] = useState("");
   const [aiSummary, setAiSummary] = useState("");
@@ -68,6 +69,7 @@ export function QuickAddSourcedModal({
     setContactInfo("");
     setEmail("");
     setPhone("");
+    setAddress("");
     setPrimarySkills("");
     setYearsOfExperience("");
     setAiSummary("");
@@ -84,6 +86,7 @@ export function QuickAddSourcedModal({
     if (parsedName) setFullName(parsedName);
     if (data.email) setEmail(data.email);
     if (data.phone) setPhone(data.phone);
+    if (data.address) setAddress(data.address);
     if (data.primarySkills?.length) {
       setPrimarySkills(data.primarySkills.join(", "));
     }
@@ -151,6 +154,7 @@ export function QuickAddSourcedModal({
         linkedin_url: contactInfo,
         email: email,
         phone: phone,
+        address: address,
         primary_skills: primarySkills,
         years_of_experience: yearsOfExperience
           ? Number(yearsOfExperience)
@@ -321,6 +325,17 @@ export function QuickAddSourcedModal({
               />
             </label>
           </div>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-primary">Address</span>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="e.g. 123 Main St, Anytown, CA 12345"
+              className={inputClass}
+            />
+          </label>
 
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-primary">
