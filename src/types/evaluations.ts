@@ -25,3 +25,18 @@ export interface SubmitEvaluationInput {
   scores: Record<string, number>;
   notes?: string;
 }
+
+export interface ScorecardCriterion {
+  id: string;
+  name: string;
+  description?: string;
+  weight?: number;
+}
+
+export interface ScorecardTemplate {
+  id: string;
+  job_id: string;
+  template_name: string;
+  criteria: ScorecardCriterion[];
+  created_at?: string;
+}

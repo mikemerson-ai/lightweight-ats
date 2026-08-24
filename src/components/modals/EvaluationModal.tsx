@@ -1,25 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Star } from "lucide-react";
 import {
   type Candidate,
 } from "@/app/actions/candidates";
-import { submitEvaluation } from "@/app/actions/evaluations";
+import { submitEvaluation, getScorecardTemplate } from "@/app/actions/evaluations";
 import {
   EVALUATION_RECOMMENDATIONS,
   type EvaluationRecommendation,
+  type ScorecardCriterion,
 } from "@/types/evaluations";
 import { useRecruiter } from "@/context/RecruiterContext";
-
-const CRITERIA = [
-  { key: "technical_role_fit", label: "Technical / Role Fit" },
-  { key: "communication", label: "Communication" },
-  { key: "reliability", label: "Reliability" },
-  { key: "culture_fit", label: "Culture Fit" },
-] as const;
-
-type CriterionKey = (typeof CRITERIA)[number]["key"];
 
 const RECOMMENDATION_STYLES: Record<
   EvaluationRecommendation,
@@ -46,18 +38,41 @@ export function EvaluationModal({
 }: EvaluationModalProps) {
   const { activeRecruiter } = useRecruiter();
 
-  const [scores, setScores] = useState<Record<CriterionKey, number>>({
-    technical_role_fit: 0,
-    communication: 0,
-    reliability: 0,
-    culture_fit: 0,
-  });
+  const [criteria, setCriteria] = useState<ScorecardCriterion[]>([]);
+  const [scores, setScores] = useState<Record<string, number>>({});
   const [recommendation, setRecommendation] = useState<EvaluationRecommendation>(
     "Hire",
   );
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open && candidate?.job_id) {
+      loadTemplate(candidate.job_id);
+    }
+  }, [open, candidate]);
+
+  async function loadTemplate(jobId: string) {
+    setLoading(true);
+    setError("");
+    try {
+      const template = await getScorecardTemplate(jobId);
+      setCriteria(template.criteria);
+      
+      const initialScores: Record<string, number> = {};
+      template.criteria.forEach(c => {
+        initialScores[c.id] = 0;
+      });
+      setScores(initialScores);
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to load evaluation criteria.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!open || !candidate) {
     return null;
@@ -66,20 +81,19 @@ export function EvaluationModal({
   const currentCandidate = candidate;
 
   function reset() {
-    setScores({
-      technical_role_fit: 0,
-      communication: 0,
-      reliability: 0,
-      culture_fit: 0,
+    const initialScores: Record<string, number> = {};
+    criteria.forEach(c => {
+      initialScores[c.id] = 0;
     });
+    setScores(initialScores);
     setRecommendation("Hire");
     setNotes("");
     setError("");
   }
 
   async function handleSubmit() {
-    const hasAllScores = CRITERIA.every(
-      ({ key }) => (scores[key] ?? 0) > 0,
+    const hasAllScores = criteria.every(
+      (c) => (scores[c.id] ?? 0) > 0,
     );
     if (!hasAllScores) {
       setError("Please rate every competency before submitting.");
@@ -113,8 +127,8 @@ export function EvaluationModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-primary/50" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-xl border bg-white shadow-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between bg-primary px-5 py-4">
+      <div className="relative w-full max-w-lg rounded-xl border bg-white shadow-lg max-h-[90vh] overflow-y-auto flex flex-col">
+        <div className="flex items-center justify-between bg-primary px-5 py-4 shrink-0">
           <h2 className="text-lg font-semibold text-white">Submit Evaluation</h2>
           <button
             type="button"
@@ -126,7 +140,7 @@ export function EvaluationModal({
           </button>
         </div>
 
-        <div className="flex flex-col gap-5 bg-slate-50 p-6">
+        <div className="flex flex-col gap-5 bg-slate-50 p-6 flex-1">
           <div>
             <p className="text-sm text-slate-500">
               Reviewing
@@ -143,40 +157,44 @@ export function EvaluationModal({
             </p>
           </div>
 
-          <div className="grid gap-4">
-            {CRITERIA.map(({ key, label }) => {
-              const current = scores[key] ?? 0;
-              return (
-                <div key={key} className="grid gap-1.5">
-                  <span className="text-sm font-medium text-primary">{label}</span>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <button
-                        key={value}
-                        type="button"
-                        aria-label={`${label}: ${value} out of 5`}
-                        className={`flex items-center justify-center rounded-md border px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                          current === value
-                            ? "border-primary bg-primary text-white"
-                            : "border-slate-300 bg-white text-slate-500 hover:bg-slate-100"
-                        }`}
-                        onClick={() =>
-                          setScores((prev) => ({ ...prev, [key]: value }))
-                        }
-                      >
-                        <Star
-                          className={`mr-1 h-4 w-4 ${
-                            current === value ? "text-white" : "text-warning"
+          {loading ? (
+            <div className="py-8 text-center text-slate-500">Loading criteria...</div>
+          ) : (
+            <div className="grid gap-4">
+              {criteria.map((c) => {
+                const current = scores[c.id] ?? 0;
+                return (
+                  <div key={c.id} className="grid gap-1.5">
+                    <span className="text-sm font-medium text-primary">{c.name}</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-label={`${c.name}: ${value} out of 5`}
+                          className={`flex items-center justify-center rounded-md border px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                            current === value
+                              ? "border-primary bg-primary text-white"
+                              : "border-slate-300 bg-white text-slate-500 hover:bg-slate-100"
                           }`}
-                        />
-                        {value}
-                      </button>
-                    ))}
+                          onClick={() =>
+                            setScores((prev) => ({ ...prev, [c.id]: value }))
+                          }
+                        >
+                          <Star
+                            className={`mr-1 h-4 w-4 ${
+                              current === value ? "text-white" : "text-warning"
+                            }`}
+                          />
+                          {value}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="grid gap-1.5">
             <span className="text-sm font-medium text-primary">Recommendation</span>
@@ -222,7 +240,7 @@ export function EvaluationModal({
               type="button"
               className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               onClick={handleSubmit}
-              disabled={saving}
+              disabled={saving || loading}
             >
               {saving ? "Submitting..." : "Submit Evaluation"}
             </button>

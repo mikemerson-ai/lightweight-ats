@@ -63,7 +63,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 ---
 
 ## Phase 5: Profile Drawer, Document Compliance & Scorecards
-- [ ] **Task 5.1: Candidate Profile Drawer & In-Line Editing**
+- [x] **Task 5.1: Candidate Profile Drawer & In-Line Editing**
   - Build slide-out `CandidateDrawer.tsx` with tabbed navigation and full field editability.
 - [x] **Task 5.2: Categorized Document Checklist & Expiration Tracker**
   - Build `DocumentChecklistTab.tsx` grouped by category (*Onboarding Records*, *Compliance*, *Security*, *Medical*, *Training*).
@@ -71,7 +71,7 @@ This implementation plan breaks down the development of the Lightweight ATS into
 - [x] **Task 5.3: DNH Warning Banner & Centralized Activity Stream**
   - Implement red warning banner for candidates tagged as `Do-Not-Hire` or `Rehire`.
   - Build `ActivityStream.tsx` logging recruiter outreach notes, call logs, and stage change history.
-- [ ] **Task 5.4: Custom Scorecards & Evaluations**
+- [x] **Task 5.4: Custom Scorecards & Evaluations**
   - Build `ScorecardBuilder.tsx` and `EvaluationForm.tsx` with 1–5 star rating scales.
 
 ---

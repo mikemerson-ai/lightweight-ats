@@ -8,7 +8,8 @@ import { CreateJobModal } from "./modals/CreateJobModal";
 import { EditJobModal } from "./modals/EditJobModal";
 import { KanbanBoard } from "./kanban/KanbanBoard";
 import { AnalyticsModal } from "./analytics/AnalyticsModal";
-import { Pencil, Trash2, AlertCircle, BarChart3 } from "lucide-react";
+import { ScorecardBuilderModal } from "./modals/ScorecardBuilderModal";
+import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList } from "lucide-react";
 import RecruiterSwitcher from "./layout/RecruiterSwitcher";
 
 export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
@@ -21,6 +22,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
+  const [scorecardBuilderOpen, setScorecardBuilderOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -99,6 +101,14 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
                     title="Edit Job"
                   >
                     <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScorecardBuilderOpen(true)}
+                    className="p-2 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition-colors"
+                    title="Scorecard Builder"
+                  >
+                    <ClipboardList className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
@@ -188,6 +198,12 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
         job={selectedJob}
         onClose={() => setEditJobOpen(false)}
         onJobUpdated={handleJobUpdated}
+      />
+
+      <ScorecardBuilderModal
+        jobId={selectedJobId}
+        open={scorecardBuilderOpen}
+        onClose={() => setScorecardBuilderOpen(false)}
       />
 
       <AnalyticsModal
