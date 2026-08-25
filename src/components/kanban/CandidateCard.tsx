@@ -69,36 +69,31 @@ export function CandidateCard({
       {...listeners}
       onClick={() => !isDragging && onSelect?.(candidate)}
       className={[
-        "rounded-lg border bg-white p-3 shadow-sm cursor-pointer",
-        isDragging ? "ring-2 ring-secondary" : "cursor-grab active:cursor-grabbing",
+        "rounded-md border bg-white p-2 shadow-sm cursor-pointer relative overflow-hidden group",
+        isDragging ? "ring-2 ring-secondary" : "cursor-grab active:cursor-grabbing hover:border-slate-300",
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-semibold text-primary">
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+          badgeVariant === 'inbound' ? 'bg-emerald-500' :
+          badgeVariant === 'sourced' ? 'bg-blue-500' : 'bg-amber-500'
+      }`} title={`Source: ${sourceBadgeLabel(candidate)}`} />
+      
+      <div className="flex items-center justify-between gap-2 pl-1.5">
+        <span className="text-[13px] font-medium text-slate-700 truncate group-hover:text-primary transition-colors">
           {candidate.first_name} {candidate.last_name}
         </span>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className={BADGE_STYLES[badgeVariant]}>
-            {sourceBadgeLabel(candidate)}
-          </span>
+        <div className="flex items-center gap-1 shrink-0">
           {candidate.dnh_flag && (
-            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 border border-red-200">
+            <span className="rounded-sm bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-700 uppercase leading-none border border-red-200" title="Do Not Hire">
               DNH
             </span>
           )}
           {candidate.pending_resume && (
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
-              Pending Resume
+            <span className="rounded-sm bg-amber-50 px-1 py-0.5 text-[9px] font-medium text-amber-700 uppercase leading-none border border-amber-200" title="Pending Resume">
+              PR
             </span>
           )}
         </div>
-      </div>
-      <div className="mt-2 text-xs text-slate-500">
-        {candidate.jobs?.title ?? "No job assigned"}
-      </div>
-      <div className="mt-3 flex items-center gap-1 text-xs text-slate-400">
-        <Clock className="h-3 w-3" />
-        {daysInStage(candidate)}d in stage
       </div>
     </div>
   );
