@@ -234,8 +234,8 @@ export async function quickAddSourcedCandidate(
       job_id: data.job_id,
       contact_info: data.contact_info,
       linkedin_url: data.linkedin_url,
-      email: data.email,
-      phone: data.phone,
+      email: (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim(),
+      phone: (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim(),
       primary_skills: data.primary_skills,
       years_of_experience: data.years_of_experience,
       ai_summary: data.ai_summary,
@@ -525,8 +525,8 @@ export async function updateCandidateProfile(
   updateData: {
     first_name?: string;
     last_name?: string;
-    email?: string;
-    phone?: string;
+    email?: string | null;
+    phone?: string | null;
     address?: string;
     primary_skills?: string;
     years_of_experience?: number | null;
@@ -534,9 +534,17 @@ export async function updateCandidateProfile(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
+  const cleanData = { ...updateData };
+  if (cleanData.email) {
+    cleanData.email = ["not provided", "not available", "n/a"].includes(cleanData.email.trim().toLowerCase()) ? null : cleanData.email.trim();
+  }
+  if (cleanData.phone) {
+    cleanData.phone = ["not provided", "not available", "n/a"].includes(cleanData.phone.trim().toLowerCase()) ? null : cleanData.phone.trim();
+  }
+
   const { error } = await supabase
     .from("candidates")
-    .update({ ...updateData, updated_at: new Date().toISOString() })
+    .update({ ...cleanData, updated_at: new Date().toISOString() })
     .eq("id", candidateId);
 
   if (error) {
@@ -580,8 +588,12 @@ export async function updateDuplicateCandidateResume(
 
   if (parsedData.firstName) updateData.first_name = parsedData.firstName;
   if (parsedData.lastName) updateData.last_name = parsedData.lastName;
-  if (parsedData.email) updateData.email = parsedData.email;
-  if (parsedData.phone) updateData.phone = parsedData.phone;
+  if (parsedData.email) {
+    updateData.email = ["not provided", "not available", "n/a"].includes(parsedData.email.trim().toLowerCase()) ? null : parsedData.email.trim();
+  }
+  if (parsedData.phone) {
+    updateData.phone = ["not provided", "not available", "n/a"].includes(parsedData.phone.trim().toLowerCase()) ? null : parsedData.phone.trim();
+  }
   if (parsedData.address) updateData.address = parsedData.address;
   if (parsedData.primarySkills && parsedData.primarySkills.length > 0) {
     updateData.primary_skills = parsedData.primarySkills.join(", ");
