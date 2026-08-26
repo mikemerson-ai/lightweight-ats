@@ -167,7 +167,7 @@ export async function checkCandidateDuplicate(
 }> {
   const supabase = await createClient();
 
-  if (!email || !email.trim()) {
+  if (!email || !email.trim() || email.trim().toLowerCase() === "not provided") {
     return { isDuplicate: false, sameJob: false };
   }
 

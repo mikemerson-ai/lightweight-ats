@@ -68,7 +68,7 @@ export function KanbanColumn({
             />
           ))
         ) : (
-          <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-400">
+          <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs font-medium text-slate-500">
             Drop candidates here
           </div>
         )}

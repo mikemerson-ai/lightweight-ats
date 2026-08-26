@@ -57,7 +57,7 @@ export function QuickAddSourcedModal({
 
   useEffect(() => {
     const checkDuplicate = async () => {
-      if (!email || !email.trim()) {
+      if (!email || !email.trim() || email.trim().toLowerCase() === "not provided") {
         setDuplicateInfo(null);
         return;
       }

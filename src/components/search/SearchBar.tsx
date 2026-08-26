@@ -68,13 +68,13 @@ export function SearchBar() {
   return (
     <div ref={rootRef} className="relative w-full max-w-xl">
       <div className="flex items-center gap-2 rounded-full border bg-card px-4 py-2.5">
-        <Search className="h-4 w-4 text-primary" />
+        <Search className="h-4 w-4 text-slate-500 hover:text-slate-700" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search candidates by name, skill, email..."
-          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-slate-400 focus:outline-none"
+          className="flex-1 bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
           onFocus={() => results.length > 0 && setOpen(true)}
         />
         {loading ? (
@@ -83,7 +83,7 @@ export function SearchBar() {
           <button
             type="button"
             aria-label="Clear search"
-            className="text-slate-400 hover:text-danger"
+            className="text-slate-500 hover:text-slate-700"
             onClick={() => {
               setQuery("");
               setResults([]);
@@ -96,9 +96,9 @@ export function SearchBar() {
       </div>
 
       {open && query.trim() && (
-        <div className="absolute top-full mt-2 left-0 right-0 z-50 rounded-lg border bg-card shadow-lg overflow-hidden">
+        <div className="absolute top-full mt-2 left-0 right-0 z-50 rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
           {results.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-slate-400">
+            <div className="px-4 py-3 text-sm font-normal text-slate-600">
               No candidates found
             </div>
           ) : (
@@ -106,13 +106,13 @@ export function SearchBar() {
               <button
                 key={candidate.id}
                 type="button"
-                className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-100"
+                className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50"
               >
                 <span className="flex flex-col">
-                  <span className="text-sm font-semibold text-primary">
+                  <span className="text-sm font-semibold text-slate-900">
                     {candidate.first_name} {candidate.last_name}
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-600">
                     {candidate.jobs?.title ?? "No job assigned"}
                   </span>
                 </span>
