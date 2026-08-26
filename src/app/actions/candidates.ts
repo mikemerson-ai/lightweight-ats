@@ -158,7 +158,9 @@ export async function searchCandidates(query: string): Promise<Candidate[]> {
 }
 
 export async function checkCandidateDuplicate(
-  email: string,
+  firstName: string,
+  lastName: string,
+  email?: string,
   targetJobId?: string
 ): Promise<{
   isDuplicate: boolean;
@@ -167,28 +169,52 @@ export async function checkCandidateDuplicate(
 }> {
   const supabase = await createClient();
 
-  if (!email || !email.trim() || email.trim().toLowerCase() === "not provided") {
+  const isInvalidEmail = !email || !email.trim() || ["not provided", "not available", "n/a"].includes(email.trim().toLowerCase());
+  const validEmail = isInvalidEmail ? null : email?.trim();
+  const validFirstName = firstName?.trim();
+  const validLastName = lastName?.trim();
+
+  if (!validEmail && (!validFirstName || !validLastName)) {
     return { isDuplicate: false, sameJob: false };
   }
 
-  const { data, error } = await supabase
-    .from("candidates")
-    .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag")
-    .ilike("email", email.trim())
-    .order("created_at", { ascending: false });
+  const candidates: any[] = [];
+  
+  if (validEmail) {
+    const { data } = await supabase
+      .from("candidates")
+      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag")
+      .ilike("email", validEmail)
+      .order("created_at", { ascending: false });
+    if (data) candidates.push(...data);
+  }
 
-  if (error || !data || data.length === 0) {
+  if (validFirstName && validLastName) {
+    const { data } = await supabase
+      .from("candidates")
+      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag")
+      .ilike("first_name", validFirstName)
+      .ilike("last_name", validLastName)
+      .order("created_at", { ascending: false });
+    if (data) candidates.push(...data);
+  }
+
+  // Deduplicate results
+  const uniqueCandidates = Array.from(new Map(candidates.map(c => [c.id, c])).values())
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  if (uniqueCandidates.length === 0) {
     return { isDuplicate: false, sameJob: false };
   }
 
   const sameJobRecord = targetJobId
-    ? data.find((c) => c.job_id === targetJobId)
+    ? uniqueCandidates.find((c) => c.job_id === targetJobId)
     : undefined;
 
   return {
     isDuplicate: true,
     sameJob: !!sameJobRecord,
-    existingRecord: sameJobRecord || data[0],
+    existingRecord: sameJobRecord || uniqueCandidates[0],
   };
 }
 

@@ -55,15 +55,21 @@ export function QuickAddSourcedModal({
     }
   }, [open]);
 
+  const nameParts = fullName.trim().split(/\s+/);
+  const firstName = nameParts[0] ?? "";
+  const lastName = nameParts.slice(1).join(" ") || firstName;
+
   useEffect(() => {
     const checkDuplicate = async () => {
-      if (!email || !email.trim() || email.trim().toLowerCase() === "not provided") {
+      const isInvalidEmail = !email || !email.trim() || ["not provided", "not available", "n/a"].includes(email.trim().toLowerCase());
+      
+      if ((!firstName.trim() || !lastName.trim()) && isInvalidEmail) {
         setDuplicateInfo(null);
         return;
       }
       setIsCheckingDuplicate(true);
       try {
-        const result = await checkCandidateDuplicate(email, targetJob);
+        const result = await checkCandidateDuplicate(firstName, lastName, email, targetJob);
         setDuplicateInfo(result);
       } catch (err) {
         console.error("Duplicate check failed:", err);
@@ -74,15 +80,11 @@ export function QuickAddSourcedModal({
 
     const timer = setTimeout(checkDuplicate, 500);
     return () => clearTimeout(timer);
-  }, [email, targetJob]);
+  }, [fullName, firstName, lastName, email, targetJob]);
 
   if (!open) {
     return null;
   }
-
-  const nameParts = fullName.trim().split(/\s+/);
-  const firstName = nameParts[0] ?? "";
-  const lastName = nameParts.slice(1).join(" ") || firstName;
 
   function reset() {
     setFullName("");
