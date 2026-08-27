@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Job, getJobs, deleteJob } from "@/app/actions/jobs";
+import type { Candidate } from "@/app/actions/candidates";
 import { SearchBar } from "./search/SearchBar";
 import { QuickAddSourcedModal } from "./modals/QuickAddSourcedModal";
 import { CreateJobModal } from "./modals/CreateJobModal";
@@ -9,7 +10,7 @@ import { EditJobModal } from "./modals/EditJobModal";
 import { KanbanBoard, type KanbanBoardRef } from "./kanban/KanbanBoard";
 import { AnalyticsModal } from "./analytics/AnalyticsModal";
 import { ScorecardBuilderModal } from "./modals/ScorecardBuilderModal";
-import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList } from "lucide-react";
+import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList, LayoutGrid, List } from "lucide-react";
 import RecruiterSwitcher from "./layout/RecruiterSwitcher";
 
 export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
@@ -19,6 +20,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "inbound" | "outbound">("all");
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
@@ -69,6 +71,16 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleSearchSelect = (candidate: Candidate) => {
+    if (candidate.job_id !== selectedJobId) {
+      setSelectedJobId(candidate.job_id);
+    }
+    // Wait for the KanbanBoard to update if job changed
+    setTimeout(() => {
+      kanbanRef.current?.openCandidate(candidate);
+    }, 100);
   };
 
   return (
@@ -148,7 +160,35 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
           </button>
           <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
           <RecruiterSwitcher />
-          <SearchBar />
+          
+          <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("kanban")}
+              className={`flex items-center justify-center rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                viewMode === "kanban"
+                  ? "bg-white text-primary shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+              title="Kanban View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`flex items-center justify-center rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                viewMode === "list"
+                  ? "bg-white text-primary shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          <SearchBar onSelectCandidate={handleSearchSelect} />
           <select
             value={sourceFilter}
             onChange={(e) =>
@@ -177,6 +217,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
             jobId={selectedJobId}
             searchQuery={searchQuery}
             sourceFilter={sourceFilter}
+            viewMode={viewMode}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-slate-500">

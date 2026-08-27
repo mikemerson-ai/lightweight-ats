@@ -46,16 +46,19 @@ export interface KanbanBoardProps {
   jobId: string | null;
   searchQuery?: string;
   sourceFilter?: "all" | "inbound" | "outbound";
+  viewMode?: "kanban" | "list";
 }
 
 export interface KanbanBoardRef {
   addCandidate: (newCandidate: Candidate) => void;
+  openCandidate: (candidate: Candidate) => void;
 }
 
 export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function KanbanBoard({
   jobId,
   searchQuery = "",
   sourceFilter = "all",
+  viewMode = "kanban",
 }, ref) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loadedJobId, setLoadedJobId] = useState<string | null>(null);
@@ -71,6 +74,9 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
   useImperativeHandle(ref, () => ({
     addCandidate: (newCandidate) => {
       setCandidates((prev) => [newCandidate, ...prev.filter(c => c.id !== newCandidate.id)]);
+    },
+    openCandidate: (candidate) => {
+      setSelectedCandidate(candidate);
     }
   }));
 
@@ -242,8 +248,63 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
           <div className="flex items-center justify-center py-12 text-sm text-slate-400">
             Loading candidates...
           </div>
+        ) : viewMode === "list" ? (
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden mt-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4">Name</th>
+                    <th className="px-6 py-4">Stage</th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">Date Applied</th>
+                    <th className="px-6 py-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.length > 0 ? (
+                    filtered.map((candidate) => {
+                      const stageObj = PIPELINE_STAGES.find((s) => s.key === candidate.pipeline_stage) || PIPELINE_STAGES[0];
+                      return (
+                        <tr key={candidate.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-slate-900">
+                            {candidate.first_name} {candidate.last_name}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
+                              <span className={`h-1.5 w-1.5 rounded-full ${stageObj.accent}`}></span>
+                              {stageObj.title}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">{candidate.email}</td>
+                          <td className="px-6 py-4 text-slate-500">
+                            {new Date(candidate.date_applied || candidate.created_at || "").toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCandidate(candidate)}
+                              className="text-primary hover:underline font-medium"
+                            >
+                              View Details
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                        No candidates found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-3">
+          <div className="flex gap-4 overflow-x-auto pb-3 h-[calc(100vh-140px)]">
             {PIPELINE_STAGES.map((stage) => (
               <KanbanColumn
                 key={stage.key}

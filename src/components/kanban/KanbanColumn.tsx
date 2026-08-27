@@ -42,14 +42,14 @@ export function KanbanColumn({
       {...attributes}
       {...listeners}
       className={[
-        "flex w-72 shrink-0 flex-col rounded-xl border",
+        "flex w-72 shrink-0 flex-col rounded-xl border h-full",
         isOver && !isOverlay
           ? "border-secondary bg-secondary/10"
           : "border-slate-200 bg-slate-50",
         isDragging && !isOverlay ? "opacity-60" : "",
       ].join(" ")}
     >
-      <div className="flex items-center justify-between rounded-t-lg border-b bg-card px-4 py-2.5">
+      <div className="flex shrink-0 items-center justify-between rounded-t-lg border-b bg-card px-4 py-2.5">
         <span className="flex items-center gap-2">
           <span className={`h-2.5 w-2.5 rounded-full ${accent}`} />
           <span className="text-sm font-semibold text-primary">{title}</span>
@@ -58,7 +58,7 @@ export function KanbanColumn({
           {candidates.length}
         </span>
       </div>
-      <div className="flex flex-col gap-2.5 px-3 py-3">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 px-3 py-3">
         {candidates.length > 0 ? (
           candidates.map((candidate) => (
             <CandidateCard

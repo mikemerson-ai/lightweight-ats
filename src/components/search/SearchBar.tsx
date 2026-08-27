@@ -2,19 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import { searchCandidates } from "@/app/actions/candidates";
+import { type Candidate, searchCandidates } from "@/app/actions/candidates";
 
-interface SearchResult {
-  id: string;
-  first_name: string;
-  last_name: string;
-  pipeline_stage: string;
-  jobs: { title: string } | null;
-}
-
-export function SearchBar() {
+export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidate: Candidate) => void }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,6 +99,11 @@ export function SearchBar() {
                 key={candidate.id}
                 type="button"
                 className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50"
+                onClick={() => {
+                  onSelectCandidate?.(candidate);
+                  setOpen(false);
+                  setQuery("");
+                }}
               >
                 <span className="flex flex-col">
                   <span className="text-sm font-semibold text-slate-900">
@@ -117,7 +114,7 @@ export function SearchBar() {
                   </span>
                 </span>
                 <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-                  {candidate.pipeline_stage ?? "New Application"}
+                  {candidate.pipeline_stage?.replace(/_/g, " ") ?? "New Application"}
                 </span>
               </button>
             ))
