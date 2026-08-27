@@ -58,7 +58,7 @@ export function KanbanColumn({
           {candidates.length}
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 px-3 py-3">
+      <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-2.5">
         {candidates.length > 0 ? (
           candidates.map((candidate) => (
             <CandidateCard
