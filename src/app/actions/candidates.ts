@@ -220,7 +220,7 @@ export async function checkCandidateDuplicate(
 
 export async function quickAddSourcedCandidate(
   data: QuickAddSourcedCandidateInput,
-): Promise<Candidate> {
+): Promise<{ success: boolean; candidate?: Candidate; error?: string }> {
   const supabase = await createClient();
 
   const { data: candidate, error } = await supabase
@@ -251,9 +251,9 @@ export async function quickAddSourcedCandidate(
 
   if (error) {
     if (error.code === "23505") {
-      throw new Error("A candidate with this email already exists.");
+      return { success: false, error: "A candidate with this email already exists." };
     }
-    throw new Error(error.message);
+    return { success: false, error: error.message };
   }
 
   const logPayload = {
@@ -268,7 +268,7 @@ export async function quickAddSourcedCandidate(
     .insert(logPayload);
 
   if (createLogError) {
-    throw new Error(createLogError.message);
+    return { success: false, error: createLogError.message };
   }
 
   if (data.outreach_notes) {
@@ -280,11 +280,13 @@ export async function quickAddSourcedCandidate(
     });
 
     if (logError) {
-      throw new Error(logError.message);
+      return { success: false, error: logError.message };
     }
   }
 
-  return candidate as Candidate;
+  revalidatePath("/");
+
+  return { success: true, candidate: candidate as Candidate };
 }
 
 export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
@@ -561,10 +563,10 @@ export async function updateDuplicateCandidateResume(
   candidateId: string,
   parsedData: ParsedCandidate,
   updatedBy?: string
-): Promise<{ success: boolean; error?: string; candidateId?: string }> {
+): Promise<{ success: boolean; error?: string; candidate?: Candidate }> {
   const supabase = await createClient();
 
-  const { data: candidate, error: fetchError } = await supabase
+  const { data: candidateRecord, error: fetchError } = await supabase
     .from("candidates")
     .select("id, dnh_flag")
     .eq("id", candidateId)
@@ -574,7 +576,7 @@ export async function updateDuplicateCandidateResume(
     return { success: false, error: fetchError.message };
   }
 
-  if (candidate.dnh_flag) {
+  if (candidateRecord.dnh_flag) {
     return { 
       success: false, 
       error: "Candidate is marked as Do Not Hire (DNH). Resume updates are prohibited." 
@@ -603,10 +605,12 @@ export async function updateDuplicateCandidateResume(
   if (typeof parsedData.yearsOfExperience === "number") updateData.years_of_experience = parsedData.yearsOfExperience;
   if (parsedData.work_experience) updateData.work_experience = parsedData.work_experience;
 
-  const { error: updateError } = await supabase
+  const { data: updatedCandidate, error: updateError } = await supabase
     .from("candidates")
     .update(updateData)
-    .eq("id", candidateId);
+    .eq("id", candidateId)
+    .select("*, jobs(title)")
+    .single();
 
   if (updateError) {
     return { success: false, error: updateError.message };
@@ -627,5 +631,5 @@ export async function updateDuplicateCandidateResume(
   const { revalidatePath } = await import("next/cache");
   revalidatePath("/");
 
-  return { success: true, candidateId };
+  return { success: true, candidate: updatedCandidate as Candidate };
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Job, getJobs, deleteJob } from "@/app/actions/jobs";
 import { SearchBar } from "./search/SearchBar";
 import { QuickAddSourcedModal } from "./modals/QuickAddSourcedModal";
 import { CreateJobModal } from "./modals/CreateJobModal";
 import { EditJobModal } from "./modals/EditJobModal";
-import { KanbanBoard } from "./kanban/KanbanBoard";
+import { KanbanBoard, type KanbanBoardRef } from "./kanban/KanbanBoard";
 import { AnalyticsModal } from "./analytics/AnalyticsModal";
 import { ScorecardBuilderModal } from "./modals/ScorecardBuilderModal";
 import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList } from "lucide-react";
@@ -29,6 +29,8 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
   const [deleteCascadePrompt, setDeleteCascadePrompt] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+
+  const kanbanRef = useRef<KanbanBoardRef>(null);
 
   const handleJobCreated = async () => {
     const updatedJobs = await getJobs();
@@ -171,6 +173,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
       <main className="flex-1 overflow-auto p-6">
         {selectedJobId ? (
           <KanbanBoard
+            ref={kanbanRef}
             jobId={selectedJobId}
             searchQuery={searchQuery}
             sourceFilter={sourceFilter}
@@ -185,6 +188,9 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
       <QuickAddSourcedModal
         open={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
+        onCandidateAdded={(newCandidate) => {
+          kanbanRef.current?.addCandidate(newCandidate);
+        }}
       />
 
       <CreateJobModal

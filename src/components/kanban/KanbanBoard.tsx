@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { type DragEndEvent } from "@dnd-kit/core";
 import {
   getCandidatesByJob,
@@ -48,11 +48,15 @@ export interface KanbanBoardProps {
   sourceFilter?: "all" | "inbound" | "outbound";
 }
 
-export function KanbanBoard({
+export interface KanbanBoardRef {
+  addCandidate: (newCandidate: Candidate) => void;
+}
+
+export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function KanbanBoard({
   jobId,
   searchQuery = "",
   sourceFilter = "all",
-}: KanbanBoardProps) {
+}, ref) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loadedJobId, setLoadedJobId] = useState<string | null>(null);
 
@@ -63,6 +67,12 @@ export function KanbanBoard({
   const [missingComplianceItems, setMissingComplianceItems] = useState<string[]>([]);
 
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    addCandidate: (newCandidate) => {
+      setCandidates((prev) => [newCandidate, ...prev.filter(c => c.id !== newCandidate.id)]);
+    }
+  }));
 
   useEffect(() => {
     if (!jobId) {
@@ -271,4 +281,4 @@ export function KanbanBoard({
       />
     </>
   );
-}
+});

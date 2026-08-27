@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
-import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume } from "@/app/actions/candidates";
+import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume, type Candidate } from "@/app/actions/candidates";
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
+import { useRouter } from "next/navigation";
 import { parseResumeAction } from "@/app/actions/resumeParser";
 import type { ParsedCandidate } from "@/lib/gemini/parser";
 import { getJobs, type Job } from "@/app/actions/jobs";
@@ -12,11 +13,13 @@ import { useRecruiter } from "@/context/RecruiterContext";
 interface QuickAddSourcedModalProps {
   open: boolean;
   onClose: () => void;
+  onCandidateAdded?: (candidate: Candidate) => void;
 }
 
 export function QuickAddSourcedModal({
   open,
   onClose,
+  onCandidateAdded,
 }: QuickAddSourcedModalProps) {
   const [fullName, setFullName] = useState("");
   const [candidateOrigin, setCandidateOrigin] = useState<"sourced" | "applied">("applied");
@@ -44,6 +47,7 @@ export function QuickAddSourcedModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   const { activeRecruiter } = useRecruiter();
+  const router = useRouter();
 
   useEffect(() => {
     if (open) {
@@ -192,10 +196,12 @@ export function QuickAddSourcedModal({
         activeRecruiter?.name
       );
       
-      if (!res.success) {
+      if (!res.success || !res.candidate) {
         throw new Error(res.error || "Failed to update candidate.");
       }
       
+      onCandidateAdded?.(res.candidate);
+      router.refresh();
       window.alert("Candidate resume and evaluation updated successfully");
       reset();
       onClose();
@@ -216,7 +222,7 @@ export function QuickAddSourcedModal({
     setSaving(true);
     setError("");
     try {
-      await quickAddSourcedCandidate({
+      const res = await quickAddSourcedCandidate({
         first_name: firstName,
         last_name: lastName,
         source_channel: sourceChannel,
@@ -240,6 +246,14 @@ export function QuickAddSourcedModal({
         work_experience: workExperience,
         author_name: activeRecruiter?.name || "Recruiter",
       });
+
+      if (!res.success || !res.candidate) {
+        throw new Error(res.error || "Failed to add candidate.");
+      }
+
+      onCandidateAdded?.(res.candidate);
+      router.refresh();
+      window.alert("Candidate successfully added");
       reset();
       onClose();
     } catch (err: any) {
