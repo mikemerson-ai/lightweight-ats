@@ -26,6 +26,8 @@ import { useRecruiter } from "@/context/RecruiterContext";
 import {
   getSourceBadgeVariant,
   sourceBadgeLabel,
+  getCandidateOriginDate,
+  formatCandidateDate,
 } from "@/components/kanban/CandidateCard";
 import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import type { Evaluation } from "@/types/evaluations";
@@ -287,6 +289,8 @@ export function CandidateDetailDrawer({
     address: "",
     primary_skills: "",
     years_of_experience: "" as string | number,
+    date_applied: "",
+    date_sourced: "",
   });
 
   const { activeRecruiter } = useRecruiter();
@@ -298,6 +302,8 @@ export function CandidateDetailDrawer({
       await updateCandidateProfile(candidate.id, {
         ...editForm,
         years_of_experience: editForm.years_of_experience ? Number(editForm.years_of_experience) : null,
+        date_applied: editForm.date_applied || undefined,
+        date_sourced: editForm.date_sourced || undefined,
       });
       setShowEditModal(false);
       window.location.reload();
@@ -432,6 +438,8 @@ export function CandidateDetailDrawer({
         address: candidate.address || "",
         primary_skills: candidate.primary_skills || "",
         years_of_experience: candidate.years_of_experience || "",
+        date_applied: candidate.date_applied ? candidate.date_applied.split("T")[0] : "",
+        date_sourced: candidate.date_sourced ? candidate.date_sourced.split("T")[0] : "",
       });
     }
   }, [candidate, activeRecruiter]);
@@ -479,6 +487,8 @@ export function CandidateDetailDrawer({
       ?.split(",")
       .map((s) => s.trim())
       .filter(Boolean) ?? [];
+
+  const originInfo = candidate ? getCandidateOriginDate(candidate) : { label: "Applied", date: "" };
 
   return (
     <div
@@ -589,6 +599,13 @@ export function CandidateDetailDrawer({
               >
                 {sourceBadgeLabel(candidate)}
               </span>
+
+              {originInfo.date && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium text-white shadow-sm border border-white/20">
+                  <CalendarClock className="h-3.5 w-3.5 text-white/90" />
+                  {originInfo.label}: {originInfo.date}
+                </span>
+              )}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/90">
               {candidate.email && (
@@ -695,9 +712,28 @@ export function CandidateDetailDrawer({
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">Primary Skills (comma separated)</label>
                       <input type="text" value={editForm.primary_skills} onChange={(e) => setEditForm({...editForm, primary_skills: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Years of Experience</label>
-                      <input type="number" value={editForm.years_of_experience} onChange={(e) => setEditForm({...editForm, years_of_experience: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" min="0" step="1" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Years of Experience</label>
+                        <input type="number" value={editForm.years_of_experience} onChange={(e) => setEditForm({...editForm, years_of_experience: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" min="0" step="1" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                          {candidate.source_type === "outbound" || candidate.source_type === "sourced" ? "Date Sourced" : "Date Applied"}
+                        </label>
+                        <input
+                          type="date"
+                          value={candidate.source_type === "outbound" || candidate.source_type === "sourced" ? editForm.date_sourced : editForm.date_applied}
+                          onChange={(e) => {
+                            if (candidate.source_type === "outbound" || candidate.source_type === "sourced") {
+                              setEditForm({ ...editForm, date_sourced: e.target.value });
+                            } else {
+                              setEditForm({ ...editForm, date_applied: e.target.value });
+                            }
+                          }}
+                          className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
                     </div>
                     <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">
                       <button onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-slate-300 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors text-slate-700">Cancel</button>

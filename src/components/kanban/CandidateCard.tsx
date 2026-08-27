@@ -14,11 +14,29 @@ export function getSourceBadgeVariant(candidate: Candidate): SourceBadgeVariant 
   return "inbound";
 }
 
-function formatOriginDate(dateStr?: string | null): string {
+export function formatCandidateDate(dateStr?: string | null): string {
   if (!dateStr) return "";
-  const parts = dateStr.split("T")[0].split("-");
-  if (parts.length !== 3) return "";
-  return `: ${parts[1]}/${parts[2]}/${parts[0]}`;
+  const clean = dateStr.split("T")[0];
+  const parts = clean.split("-");
+  if (parts.length === 3) {
+    return `${parts[1]}/${parts[2]}/${parts[0]}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString();
+  }
+  return dateStr;
+}
+
+export function getCandidateOriginDate(candidate: Candidate): { label: string; date: string } {
+  const isSourced = candidate.source_type === "outbound" || candidate.source_type === "sourced";
+  const rawDate = isSourced
+    ? (candidate.date_sourced || candidate.created_at)
+    : (candidate.date_applied || candidate.created_at);
+  return {
+    label: isSourced ? "Sourced" : "Applied",
+    date: formatCandidateDate(rawDate),
+  };
 }
 
 export function sourceBadgeLabel(candidate: Candidate): string {
@@ -56,6 +74,7 @@ export function CandidateCard({
     useSortable({ id: candidate.id });
 
   const badgeVariant = getSourceBadgeVariant(candidate);
+  const originInfo = getCandidateOriginDate(candidate);
 
   return (
     <div
@@ -76,7 +95,7 @@ export function CandidateCard({
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${
           badgeVariant === 'inbound' ? 'bg-emerald-500' :
           badgeVariant === 'sourced' ? 'bg-blue-500' : 'bg-amber-500'
-      }`} title={`Source: ${sourceBadgeLabel(candidate)}`} />
+      }`} title={`Source: ${sourceBadgeLabel(candidate)}${originInfo.date ? ` (${originInfo.label}: ${originInfo.date})` : ''}`} />
       
       <div className="flex items-center justify-between gap-2 pl-1.5">
         <span className="text-[13px] font-medium text-slate-700 truncate group-hover:text-primary transition-colors">
@@ -95,6 +114,14 @@ export function CandidateCard({
           )}
         </div>
       </div>
+      {originInfo.date && (
+        <div className="flex items-center justify-between text-[11px] text-slate-400 pl-1.5 mt-0.5">
+          <span className="truncate">{candidate.jobs?.title || "General"}</span>
+          <span className="shrink-0 text-[10.5px] text-slate-400 font-normal">
+            {originInfo.date}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

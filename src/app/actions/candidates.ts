@@ -532,6 +532,8 @@ export async function updateCandidateProfile(
     address?: string;
     primary_skills?: string;
     years_of_experience?: number | null;
+    date_applied?: string;
+    date_sourced?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();

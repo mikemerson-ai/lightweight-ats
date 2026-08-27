@@ -12,6 +12,7 @@ import { KanbanColumn } from "./KanbanColumn";
 import { DisqualificationModal } from "./DisqualificationModal";
 import { ComplianceAlertModal } from "./ComplianceAlertModal";
 import { CandidateDetailDrawer } from "@/components/candidates/CandidateDetailDrawer";
+import { getCandidateOriginDate } from "./CandidateCard";
 
 export interface PipelineStage {
   key: string;
@@ -278,7 +279,16 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                           </td>
                           <td className="px-6 py-4 text-slate-500">{candidate.email}</td>
                           <td className="px-6 py-4 text-slate-500">
-                            {new Date(candidate.date_applied || candidate.created_at || "").toLocaleDateString()}
+                            {(() => {
+                              const originInfo = getCandidateOriginDate(candidate);
+                              return originInfo.date ? (
+                                <span title={`${originInfo.label}: ${originInfo.date}`}>
+                                  {originInfo.date}
+                                </span>
+                              ) : (
+                                "-"
+                              );
+                            })()}
                           </td>
                           <td className="px-6 py-4">
                             <button
