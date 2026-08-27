@@ -69,7 +69,7 @@ export function CandidateCard({
       {...listeners}
       onClick={() => !isDragging && onSelect?.(candidate)}
       className={[
-        "rounded-md border bg-white p-2 shadow-sm cursor-pointer relative overflow-hidden group",
+        "shrink-0 rounded-md border bg-white p-2 shadow-sm cursor-pointer relative overflow-hidden group",
         isDragging ? "ring-2 ring-secondary" : "cursor-grab active:cursor-grabbing hover:border-slate-300",
       ].join(" ")}
     >
