@@ -2,6 +2,7 @@
 
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { type DragEndEvent } from "@dnd-kit/core";
+import { Star } from "lucide-react";
 import {
   getCandidatesByJob,
   updateCandidateStage,
@@ -118,6 +119,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
           candidate.email,
           candidate.primary_skills,
           candidate.status_tag,
+          candidate.ai_summary,
         ]
           .filter(Boolean)
           .join(" ")
@@ -257,6 +259,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                   <tr>
                     <th className="px-6 py-4">Name</th>
                     <th className="px-6 py-4">Stage</th>
+                    <th className="px-6 py-4">AI Fit Score Summary</th>
                     <th className="px-6 py-4">Email</th>
                     <th className="px-6 py-4">Date Applied</th>
                     <th className="px-6 py-4">Action</th>
@@ -269,16 +272,63 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                       return (
                         <tr key={candidate.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-6 py-4 font-medium text-slate-900">
-                            {candidate.first_name} {candidate.last_name}
+                            <div className="flex items-center gap-2">
+                              <span>{candidate.first_name} {candidate.last_name}</span>
+                              {candidate.dnh_flag && (
+                                <span className="rounded-sm bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-700 uppercase leading-none border border-red-200" title="Do Not Hire">
+                                  DNH
+                                </span>
+                              )}
+                              {candidate.pending_resume && (
+                                <span className="rounded-sm bg-amber-50 px-1 py-0.5 text-[9px] font-medium text-amber-700 uppercase leading-none border border-amber-200" title="Pending Resume">
+                                  PR
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
                               <span className={`h-1.5 w-1.5 rounded-full ${stageObj.accent}`}></span>
                               {stageObj.title}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-slate-500">{candidate.email}</td>
-                          <td className="px-6 py-4 text-slate-500">
+                          <td className="px-6 py-4 min-w-[260px] max-w-md">
+                            {candidate.fit_rating != null || candidate.ai_summary ? (
+                              <div className="space-y-1">
+                                {candidate.fit_rating != null && (
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center">
+                                      {[...Array(5)].map((_, i) => (
+                                        <Star
+                                          key={i}
+                                          className={`h-3.5 w-3.5 ${
+                                            i < candidate.fit_rating!
+                                              ? "fill-amber-400 text-amber-400"
+                                              : "fill-slate-100 text-slate-300"
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                    <span className="text-xs font-semibold text-slate-700">
+                                      {candidate.fit_rating}/5
+                                    </span>
+                                  </div>
+                                )}
+                                {candidate.ai_summary ? (
+                                  <p
+                                    className="text-xs text-slate-600 line-clamp-2 leading-relaxed"
+                                    title={candidate.ai_summary}
+                                  >
+                                    {candidate.ai_summary}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">No summary available</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">{candidate.email || "-"}</td>
+                          <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
                             {(() => {
                               const originInfo = getCandidateOriginDate(candidate);
                               return originInfo.date ? (
@@ -290,7 +340,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                               );
                             })()}
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setSelectedCandidate(candidate)}
@@ -304,7 +354,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                         No candidates found.
                       </td>
                     </tr>
