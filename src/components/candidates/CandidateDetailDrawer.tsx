@@ -32,7 +32,8 @@ import {
 import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import type { Evaluation } from "@/types/evaluations";
 import { EvaluationModal } from "@/components/modals/EvaluationModal";
-import { Trash2 } from "lucide-react";
+import { ScorecardViewerModal } from "@/components/modals/ScorecardViewerModal";
+import { Trash2, Sparkles } from "lucide-react";
 
 const STAGE_TITLES: Record<string, string> = {
   new_application: "New Application",
@@ -264,6 +265,7 @@ export function CandidateDetailDrawer({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+  const [showScorecardModal, setShowScorecardModal] = useState(false);
   const [newDocName, setNewDocName] = useState(STANDARD_COMPLIANCE_DOCUMENTS[0].name);
   const [newDocCategory, setNewDocCategory] = useState(STANDARD_COMPLIANCE_DOCUMENTS[0].category);
   const [newDocRequiresExpiration, setNewDocRequiresExpiration] = useState(STANDARD_COMPLIANCE_DOCUMENTS[0].requiresExpiration);
@@ -776,9 +778,25 @@ export function CandidateDetailDrawer({
             )}
             
             <section className="rounded-xl border bg-white p-5">
-              <h3 className="text-sm font-semibold text-primary">
-                AI Fit Summary
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                  <span>AI Fit Summary</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                    Pass 1 Fast Intake
+                  </span>
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={() => setShowScorecardModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/30 bg-secondary/10 px-2.5 py-1 text-xs font-semibold text-secondary hover:bg-secondary/20 transition shadow-xs"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {evaluations.some((ev) => ev.reviewer_name?.includes("AI") || ev.notes?.includes("Hard Gate"))
+                    ? "View Deep Scorecard"
+                    : "Generate AI Scorecard"}
+                </button>
+              </div>
               
               {candidate.fit_rating != null && (
                 <div className="mt-3 flex items-center gap-1">
@@ -944,61 +962,97 @@ export function CandidateDetailDrawer({
                 </div>
               ) : activeTab === "evaluations" ? (
                 <div className="mt-3 flex flex-col gap-3">
-                  <button
-                    type="button"
-                    className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
-                    onClick={() => setShowEvaluationModal(true)}
-                  >
-                    Submit Evaluation
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary/90 transition shadow-xs"
+                      onClick={() => setShowEvaluationModal(true)}
+                    >
+                      Submit Recruiter Evaluation
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-md border border-secondary bg-secondary/10 px-3 py-2 text-sm font-medium text-secondary hover:bg-secondary/20 transition shadow-xs"
+                      onClick={() => setShowScorecardModal(true)}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Generate AI Scorecard
+                    </button>
+                  </div>
                   {evaluations.length > 0 ? (
-                    evaluations.map((ev) => (
-                      <div
-                        key={ev.id}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-primary">
-                              {ev.reviewer_name}
-                            </span>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${recommendationStyle(ev.recommendation)}`}
-                            >
-                              {ev.recommendation}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1 text-sm font-semibold text-primary">
-                            <Star className="h-4 w-4 text-warning" />
-                            {(ev.aggregate_score ?? 0).toFixed(1)} / 5.0
-                          </div>
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
-                          <CalendarClock className="h-3 w-3" />
-                          {new Date(ev.created_at).toLocaleString()}
-                        </div>
-                        {ev.scores && Object.keys(ev.scores).length > 0 && (
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            {Object.entries(ev.scores).map(([key, value]) => (
-                              <div
-                                key={key}
-                                className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1.5"
+                    evaluations.map((ev) => {
+                      const isAiScorecard = ev.reviewer_name?.includes("AI") || ev.notes?.includes("Hard Gate");
+                      return (
+                        <div
+                          key={ev.id}
+                          className={`rounded-lg border px-4 py-3 ${
+                            isAiScorecard
+                              ? "border-secondary/30 bg-secondary/5"
+                              : "border-slate-200 bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold text-primary flex items-center gap-1">
+                                {isAiScorecard && <Sparkles className="h-3.5 w-3.5 text-secondary" />}
+                                {ev.reviewer_name}
+                              </span>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${recommendationStyle(ev.recommendation)}`}
                               >
-                                <span className="text-xs text-slate-500">
-                                  {key.replace(/_/g, " ")}
-                                </span>
-                                <span className="text-xs font-semibold text-primary">
-                                  {value} / 5
-                                </span>
-                              </div>
-                            ))}
+                                {ev.recommendation}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-sm font-semibold text-primary">
+                              <Star className="h-4 w-4 text-warning" />
+                              {(ev.aggregate_score ?? 0).toFixed(1)} / 5.0
+                            </div>
                           </div>
-                        )}
-                        {ev.notes && (
-                          <p className="mt-3 text-sm text-slate-700">{ev.notes}</p>
-                        )}
-                      </div>
-                    ))
+                          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+                            <CalendarClock className="h-3 w-3" />
+                            {new Date(ev.created_at).toLocaleString()}
+                          </div>
+                          {isAiScorecard ? (
+                            <div className="mt-3 flex items-center justify-between border-t border-secondary/20 pt-3">
+                              <span className="text-xs text-slate-600 font-medium">
+                                Evidence-backed scorecard & interview probes
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setShowScorecardModal(true)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-secondary hover:underline"
+                              >
+                                <Sparkles className="h-3 w-3" />
+                                View Full Scorecard
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              {ev.scores && Object.keys(ev.scores).length > 0 && (
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  {Object.entries(ev.scores).map(([key, value]) => (
+                                    <div
+                                      key={key}
+                                      className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1.5"
+                                    >
+                                      <span className="text-xs text-slate-500">
+                                        {key.replace(/_/g, " ")}
+                                      </span>
+                                      <span className="text-xs font-semibold text-primary">
+                                        {value} / 5
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {ev.notes && (
+                                <p className="mt-3 text-sm text-slate-700">{ev.notes}</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-sm text-slate-400">
                       No evaluations submitted yet for this candidate.
@@ -1099,6 +1153,25 @@ export function CandidateDetailDrawer({
           getEvaluationsByCandidate(candidate.id)
             .then(setEvaluations)
             .catch(() => setEvaluations([]));
+        }}
+      />
+      <ScorecardViewerModal
+        candidate={candidate}
+        open={showScorecardModal}
+        onClose={() => setShowScorecardModal(false)}
+        existingMarkdown={
+          evaluations.find(
+            (ev) => ev.reviewer_name?.includes("AI") || ev.notes?.includes("Hard Gate")
+          )?.notes || null
+        }
+        onScorecardGenerated={async () => {
+          if (!candidate) return;
+          const [evs, acts] = await Promise.all([
+            getEvaluationsByCandidate(candidate.id),
+            getCandidateActivity(candidate.id),
+          ]);
+          setEvaluations(evs);
+          setActivity(acts);
         }}
       />
     </div>
