@@ -29,8 +29,17 @@ export function ScorecardViewerModal({
   const [viewMode, setViewMode] = useState<"rendered" | "raw">("rendered");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Sync markdown if existingMarkdown changes
-  if (existingMarkdown && existingMarkdown !== markdown && !loading) {
+  const [prevCandidateId, setPrevCandidateId] = useState<string | undefined>(candidate?.id);
+
+  // Sync markdown if candidate changes or existingMarkdown changes
+  if (candidate?.id !== prevCandidateId) {
+    setPrevCandidateId(candidate?.id);
+    setMarkdown(existingMarkdown || "");
+    setError("");
+    setShowUpload(false);
+    setSelectedFile(null);
+    setViewMode("rendered");
+  } else if (existingMarkdown && existingMarkdown !== markdown && !loading) {
     setMarkdown(existingMarkdown);
   }
 
@@ -96,6 +105,14 @@ export function ScorecardViewerModal({
       <div className="space-y-6 text-slate-800">
         {sections.map((section, idx) => {
           const trimmed = section.trim();
+
+          // Skip empty blocks or blocks that are just markdown artifacts like '#'
+          if (!trimmed || trimmed.replace(/#+/g, "").trim() === "") return null;
+
+          // Section 0: Candidate Screening Summary (skip because it's in the top banner)
+          if (trimmed.includes("Candidate Screening Summary")) {
+            return null;
+          }
 
           // Section 1: Hard Gates Table
           if (trimmed.includes("Hard Gate Requirements Check") || trimmed.includes("| :---")) {
@@ -164,7 +181,7 @@ export function ScorecardViewerModal({
                             <td className="py-3 px-3 font-medium text-slate-900">{cols[0]}</td>
                             <td className="py-3 px-3 whitespace-nowrap">{statusBadge}</td>
                             <td className="py-3 px-3 text-xs italic text-slate-600 font-mono bg-slate-50/50 rounded">
-                              {cols[2]}
+                              {cols[2].replace(/\*\*/g, "").replace(/\*/g, "")}
                             </td>
                           </tr>
                         );
@@ -193,9 +210,9 @@ export function ScorecardViewerModal({
                     return (
                       <div key={bIdx} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                         <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                          {title.replace(/\*\*/g, "").trim()}
+                          {title.replace(/\*\*/g, "").replace(/\*/g, "").trim()}
                         </span>
-                        <p className="text-sm text-slate-700 leading-relaxed">{desc.trim()}</p>
+                        <p className="text-sm text-slate-700 leading-relaxed">{desc.replace(/\*\*/g, "").replace(/\*/g, "").trim()}</p>
                       </div>
                     );
                   })}
@@ -221,7 +238,7 @@ export function ScorecardViewerModal({
                   {bullets.map((b, bIdx) => (
                     <li key={bIdx} className="flex items-start gap-2 text-sm text-slate-800">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
-                      <span>{b.replace(/\*\*/g, "")}</span>
+                      <span>{b.replace(/\*\*/g, "").replace(/\*/g, "")}</span>
                     </li>
                   ))}
                 </ul>
@@ -234,7 +251,7 @@ export function ScorecardViewerModal({
             const probeLines = trimmed
               .split("\n")
               .filter((l) => /^\d+\./.test(l.trim()))
-              .map((l) => l.replace(/^\d+\.\s*/, ""));
+              .map((l) => l.replace(/^\d+\.\s*/, "").replace(/\*\*/g, "").replace(/\*/g, ""));
 
             return (
               <div key={idx} className="rounded-xl border border-secondary/20 bg-secondary/5 p-5 shadow-xs">
@@ -275,7 +292,7 @@ export function ScorecardViewerModal({
           // Fallback rendering
           return (
             <div key={idx} className="rounded-xl border border-slate-200 bg-white p-4">
-              <pre className="whitespace-pre-wrap text-sm font-sans text-slate-700">{trimmed}</pre>
+              <pre className="whitespace-pre-wrap text-sm font-sans text-slate-700">{trimmed.replace(/\*\*/g, "").replace(/\*/g, "")}</pre>
             </div>
           );
         })}
