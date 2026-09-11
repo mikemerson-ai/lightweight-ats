@@ -6,6 +6,7 @@ import type { CandidateDocument } from "@/types/documents";
 import { parseResumeData, type ParsedCandidate } from "@/lib/gemini/parser";
 
 import { SourcingChannel } from "@/lib/constants";
+import type { Evaluation } from "@/types/evaluations";
 
 const HIRED_STAGE = "hired";
 const DISQUALIFIED_STAGE = "disqualified";
@@ -83,6 +84,7 @@ export interface Candidate {
   jobs: { title: string } | null;
   address?: string;
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
+  evaluations?: Evaluation[];
 }
 
 export interface ActivityLogEntry {
@@ -148,7 +150,7 @@ export async function searchCandidates(query: string): Promise<Candidate[]> {
 
   const { data, error } = await supabase
     .from("candidates")
-    .select("*, jobs(title)")
+    .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
     .or(
       `first_name.ilike.%${trimmed}%,last_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%,phone.ilike.%${trimmed}%,primary_skills.ilike.%${trimmed}%,status_tag.ilike.%${trimmed}%`,
     )
@@ -481,7 +483,7 @@ export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
 
   const { data, error } = await supabase
     .from("candidates")
-    .select("*, jobs(title)")
+    .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 

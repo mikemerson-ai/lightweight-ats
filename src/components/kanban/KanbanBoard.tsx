@@ -2,18 +2,103 @@
 
 import { useEffect, useState, forwardRef, useImperativeHandle, useCallback } from "react";
 import { type DragEndEvent } from "@dnd-kit/core";
-import { Star } from "lucide-react";
+import { Star, Sparkles } from "lucide-react";
 import {
   getCandidatesByJob,
   updateCandidateStage,
   type Candidate,
 } from "@/app/actions/candidates";
+import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import { DndContextWrapper } from "./DndContextWrapper";
 import { KanbanColumn } from "./KanbanColumn";
 import { DisqualificationModal } from "./DisqualificationModal";
 import { ComplianceAlertModal } from "./ComplianceAlertModal";
 import { CandidateDetailDrawer } from "@/components/candidates/CandidateDetailDrawer";
+import { ScorecardViewerModal } from "@/components/modals/ScorecardViewerModal";
 import { getCandidateOriginDate } from "./CandidateCard";
+
+export function getCandidateAiScorecard(candidate: Candidate) {
+  if (!candidate.evaluations || candidate.evaluations.length === 0) {
+    return null;
+  }
+
+  const aiEval = candidate.evaluations.find(
+    (ev) =>
+      ev.reviewer_name?.toLowerCase().includes("ai") ||
+      ev.notes?.includes("Candidate Screening Summary") ||
+      ev.notes?.includes("Hard Gate")
+  );
+
+  if (!aiEval) {
+    return null;
+  }
+
+  let recommendation: string | null = null;
+  let fitScore: number | null = null;
+
+  if (aiEval.notes) {
+    const recMatch = aiEval.notes.match(
+      /(?:Match|Screening)\s+Recommendation:\s*\*?\*?\s*([A-Za-z\s]+?)(?:\r?\n|\*|$)/i
+    );
+    if (recMatch && recMatch[1].trim()) {
+      recommendation = recMatch[1].trim();
+    }
+
+    const scoreMatch = aiEval.notes.match(
+      /Overall Fit Score:\s*\*?\*?\s*(\d{1,3})/i
+    );
+    if (scoreMatch && scoreMatch[1]) {
+      fitScore = parseInt(scoreMatch[1], 10);
+    }
+  }
+
+  if (!recommendation && aiEval.recommendation) {
+    recommendation = aiEval.recommendation;
+  }
+
+  if (fitScore === null && aiEval.aggregate_score != null) {
+    fitScore = Math.round(aiEval.aggregate_score * 20);
+  }
+
+  return {
+    recommendation,
+    fitScore,
+    rawNotes: aiEval.notes,
+  };
+}
+
+function formatRecommendationText(rec: string): string {
+  const upper = rec.toUpperCase();
+  if (upper.includes("STRONG PURSUE") || upper === "STRONG HIRE") return "Strong Pursue";
+  if (upper.includes("CONDITIONAL SCREEN") || upper === "HOLD") return "Conditional Screen";
+  if (upper.includes("DO NOT ADVANCE") || upper === "REJECT") return "Do Not Advance";
+  if (upper === "HIRE") return "Pursue";
+  return rec;
+}
+
+function getRecommendationBadgeStyle(rec: string): string {
+  const upper = rec.toUpperCase();
+  if (upper.includes("STRONG PURSUE") || upper === "STRONG HIRE") {
+    return "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100";
+  }
+  if (upper.includes("CONDITIONAL SCREEN") || upper === "HOLD" || upper === "HIRE") {
+    return "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100";
+  }
+  if (upper.includes("DO NOT ADVANCE") || upper === "REJECT") {
+    return "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100";
+  }
+  return "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200";
+}
+
+function getFitScoreBadgeStyle(score: number): string {
+  if (score >= 80) {
+    return "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100";
+  }
+  if (score >= 60) {
+    return "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100";
+  }
+  return "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100";
+}
 
 export interface PipelineStage {
   key: string;
@@ -73,6 +158,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
   const [missingComplianceItems, setMissingComplianceItems] = useState<string[]>([]);
 
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [scorecardCandidate, setScorecardCandidate] = useState<Candidate | null>(null);
 
   const loadCandidates = useCallback(async (targetId: string) => {
     try {
@@ -263,24 +349,26 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
         ) : viewMode === "list" ? (
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden mt-4">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
+              <table className="w-full min-w-[1400px] table-fixed text-sm text-left">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
                   <tr>
-                    <th className="px-6 py-4">Name</th>
-                    <th className="px-6 py-4">Stage</th>
-                    <th className="px-6 py-4">AI Fit Score Summary</th>
-                    <th className="px-6 py-4 whitespace-nowrap">Three Pillars</th>
-                    <th className="px-6 py-4">Email</th>
-                    <th className="px-6 py-4">Date Applied</th>
-                    <th className="px-6 py-4">Action</th>
+                    <th className="px-6 py-4 w-[200px]">Name</th>
+                    <th className="px-6 py-4 w-[160px]">Stage</th>
+                    <th className="px-6 py-4 w-[320px]">AI Profile Summary</th>
+                    <th className="px-6 py-4 w-[240px]">Three Pillars</th>
+                    <th className="px-6 py-4 w-[180px]">Screening Recommendation</th>
+                    <th className="px-6 py-4 w-[120px]">Overall Fit Score</th>
+                    <th className="px-6 py-4 w-[100px]">Date Applied</th>
+                    <th className="px-6 py-4 w-[80px] text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.length > 0 ? (
                     filtered.map((candidate) => {
                       const stageObj = PIPELINE_STAGES.find((s) => s.key === candidate.pipeline_stage) || PIPELINE_STAGES[0];
+                      const aiScorecard = getCandidateAiScorecard(candidate);
                       return (
-                        <tr key={candidate.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={candidate.id} className="group hover:bg-slate-50 transition-colors">
                           <td className="px-6 py-4 font-medium text-slate-900">
                             <div className="flex items-center gap-2">
                               <span>{candidate.first_name} {candidate.last_name}</span>
@@ -302,9 +390,9 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                               {stageObj.title}
                             </span>
                           </td>
-                          <td className="px-6 py-4 min-w-[260px] max-w-md">
+                          <td className="px-6 py-4">
                             {candidate.fit_rating != null || candidate.ai_summary ? (
-                              <div className="space-y-1">
+                              <div className="space-y-1.5">
                                 {candidate.fit_rating != null && (
                                   <div className="flex items-center gap-1.5">
                                     <div className="flex items-center">
@@ -326,7 +414,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                                 )}
                                 {candidate.ai_summary ? (
                                   <p
-                                    className="text-xs text-slate-600 line-clamp-2 leading-relaxed"
+                                    className="text-xs text-slate-600 line-clamp-3 leading-relaxed"
                                     title={candidate.ai_summary}
                                   >
                                     {candidate.ai_summary}
@@ -341,21 +429,21 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                             {candidate.sub_scores ? (
                               <div className="flex items-center gap-1.5 text-xs">
                                 <span
-                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700 border border-slate-200 shadow-2xs"
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 font-medium text-slate-700 border border-slate-200 shadow-2xs"
                                   title="Functional Experience"
                                 >
                                   <span className="text-[10px] text-slate-400 font-semibold uppercase">Exp:</span>
                                   <strong>{candidate.sub_scores.functionalExperience != null ? `${candidate.sub_scores.functionalExperience}/5` : "-"}</strong>
                                 </span>
                                 <span
-                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700 border border-slate-200 shadow-2xs"
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 font-medium text-slate-700 border border-slate-200 shadow-2xs"
                                   title="Required Credentials"
                                 >
                                   <span className="text-[10px] text-slate-400 font-semibold uppercase">Creds:</span>
                                   <strong>{candidate.sub_scores.requiredCredentials != null ? `${candidate.sub_scores.requiredCredentials}/5` : "-"}</strong>
                                 </span>
                                 <span
-                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700 border border-slate-200 shadow-2xs"
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 font-medium text-slate-700 border border-slate-200 shadow-2xs"
                                   title="Role-Specific Skills"
                                 >
                                   <span className="text-[10px] text-slate-400 font-semibold uppercase">Skills:</span>
@@ -366,7 +454,55 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                               <span className="text-xs text-slate-400 italic">-</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-slate-500">{candidate.email || "-"}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {aiScorecard?.recommendation ? (
+                              <button
+                                type="button"
+                                onClick={() => setScorecardCandidate(candidate)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all hover:shadow-xs cursor-pointer ${getRecommendationBadgeStyle(
+                                  aiScorecard.recommendation
+                                )}`}
+                                title="Click to view AI evaluation scorecard"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                <span>{formatRecommendationText(aiScorecard.recommendation)}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setScorecardCandidate(candidate)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border border-dashed border-slate-300 text-slate-400 hover:text-primary hover:border-primary transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                title="Generate AI Evaluation"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                <span>Run Eval</span>
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {aiScorecard?.fitScore != null ? (
+                              <button
+                                type="button"
+                                onClick={() => setScorecardCandidate(candidate)}
+                                className={`inline-flex items-center gap-1 px-3 py-1 rounded-md border text-xs font-bold shadow-2xs transition-all hover:shadow-xs cursor-pointer ${getFitScoreBadgeStyle(
+                                  aiScorecard.fitScore
+                                )}`}
+                                title="Click to view AI evaluation scorecard"
+                              >
+                                <span className="text-xs font-bold">{aiScorecard.fitScore}</span>
+                                <span className="text-[10px] font-medium opacity-60">/ 100</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setScorecardCandidate(candidate)}
+                                className="inline-flex items-center justify-center px-3 py-1 rounded-md border border-dashed border-slate-300 text-slate-400 hover:text-primary hover:border-primary transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                title="Generate AI Evaluation"
+                              >
+                                <span className="text-xs font-bold">-</span>
+                              </button>
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
                             {(() => {
                               const originInfo = getCandidateOriginDate(candidate);
@@ -379,7 +515,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                               );
                             })()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
                             <button
                               type="button"
                               onClick={() => setSelectedCandidate(candidate)}
@@ -393,7 +529,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
                         No candidates found.
                       </td>
                     </tr>
@@ -441,6 +577,23 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
         onCandidateUpdated={(updated) => {
           setSelectedCandidate(updated);
           setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        }}
+      />
+
+      <ScorecardViewerModal
+        open={Boolean(scorecardCandidate)}
+        onClose={() => setScorecardCandidate(null)}
+        candidate={scorecardCandidate}
+        existingMarkdown={scorecardCandidate ? getCandidateAiScorecard(scorecardCandidate)?.rawNotes || null : null}
+        onScorecardGenerated={async () => {
+          if (!scorecardCandidate) return;
+          const evs = await getEvaluationsByCandidate(scorecardCandidate.id);
+          const updated = { ...scorecardCandidate, evaluations: evs };
+          setScorecardCandidate(updated);
+          setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+          if (selectedCandidate?.id === updated.id) {
+            setSelectedCandidate(updated);
+          }
         }}
       />
     </>

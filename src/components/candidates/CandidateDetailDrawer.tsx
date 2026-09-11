@@ -1239,7 +1239,13 @@ export function CandidateDetailDrawer({
         onSubmitted={() => {
           if (!candidate) return;
           getEvaluationsByCandidate(candidate.id)
-            .then(setEvaluations)
+            .then((evs) => {
+              setEvaluations(evs);
+              onCandidateUpdated?.({
+                ...candidate,
+                evaluations: evs,
+              });
+            })
             .catch(() => setEvaluations([]));
         }}
       />
@@ -1260,6 +1266,10 @@ export function CandidateDetailDrawer({
           ]);
           setEvaluations(evs);
           setActivity(acts);
+          onCandidateUpdated?.({
+            ...candidate,
+            evaluations: evs,
+          });
         }}
       />
     </div>
