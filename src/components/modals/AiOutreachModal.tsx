@@ -102,7 +102,15 @@ export function AiOutreachModal({
         // Handle new structured schema
         if (res.outreach.initialMessage) {
           setEditableSubject(res.outreach.initialMessage.subject || "");
-          setEditableBody(res.outreach.initialMessage.body || "");
+          let body = res.outreach.initialMessage.body || "";
+          const cta = res.outreach.initialMessage.callToAction;
+          if (cta && !body.includes(cta)) {
+            const lower = body.toLowerCase();
+            if (!lower.includes("availability") && !lower.includes("available") && !lower.includes("speak")) {
+              body = `${body.trim()}\n\n${cta.trim()}`;
+            }
+          }
+          setEditableBody(body);
         } else {
           // Fallback for older schema if somehow returned
           setEditableSubject((res.outreach as any).subject || "");

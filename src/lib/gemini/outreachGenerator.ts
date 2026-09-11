@@ -98,7 +98,10 @@ CORE TENETS & ANTI-PATTERNS (CRITICAL INSTRUCTIONS):
 1. Zero Generic Fluff: NEVER use phrases like "I hope this email finds you well," "I came across your impressive profile," or "You seem like a great fit."
 2. The "One Concrete Artifact" Rule: The email MUST cite at least one specific technical or business accomplishment from the candidate's background (e.g., a specific stack migration, team expansion, or metric achieved) to prove genuine personalization.
 3. WIIFM (What's In It For Them): Position the role as a logical next step, compelling career challenge, or high-scale technical problem, not just a list of hiring requirements.
-4. Low-Friction Call-to-Action (CTA): End with a casual, zero-pressure conversation starter (e.g., "Open to a brief chat next week?" or "Worth a quick exchange?"). NO calendar links.
+4. Clear Call-to-Action (CTA) - Opportunity to Speak & Availability: 
+   - ALWAYS explicitly state that you would appreciate the chance to speak with them regarding the role.
+   - ALWAYS ask for their availability this week or next week (e.g., "I'd love the chance to speak with you regarding the role—do you have some availability for a brief call this week or next week?").
+   - The CTA MUST be integrated seamlessly at the end of the message body. NO rigid calendar links.
 5. Elite Recruiter Anti-Patterns:
    - NO mentioning salary/comp too early unless explicitly requested in custom instructions.
    - NO fake deadlines or aggressive timelines ("Please reply by Friday", "Urgent requirement").
@@ -128,7 +131,7 @@ ${customPrompt ? `- Recruiter Custom Instructions: ${customPrompt}` : ""}
 
 EXECUTION WORKFLOW:
 1. Signal Extraction: Find the most high-signal proof point from the candidate's profile (the Hook) and the primary value hook from the JD (Target Value Prop).
-2. Generate Initial Message: Apply the tenets and constraints to write the main outreach.
+2. Generate Initial Message: Apply the tenets and constraints to write the main outreach. Ensure the body includes the call to action asking for availability this week or next week to speak regarding the role.
 3. Generate Follow-Up Nudge: Write a 30-50 word lightweight second touchpoint (Day 4 Nudge) referencing the original message and candidate hook, designed primarily for Email/InMail.`;
 
   const schema = {
@@ -157,11 +160,13 @@ EXECUTION WORKFLOW:
           },
           body: {
             type: Type.STRING,
-            description: "The complete personalized message body ready to send or copy.",
+            description:
+              "The complete personalized message body ready to send or copy. MUST conclude with the call to action asking for their availability this week or next week to speak regarding the role.",
           },
           callToAction: {
             type: Type.STRING,
-            description: "The closing low-friction call to action sentence.",
+            description:
+              "The closing sentence expressing the chance to speak regarding the role and asking for availability this week or next week.",
           },
         },
         required: ["subject", "body", "callToAction"],
@@ -175,7 +180,8 @@ EXECUTION WORKFLOW:
           },
           body: {
             type: Type.STRING,
-            description: "A 30-50 word follow up message to send on Day 4.",
+            description:
+              "A 30-50 word follow up message to send on Day 4, checking if they had a chance to consider speaking about the role and their availability.",
           },
         },
         required: ["subject", "body"],
@@ -211,9 +217,18 @@ EXECUTION WORKFLOW:
   const rawText = response?.text || "";
   const parsed = JSON.parse(rawText || "{}");
 
+  const initialMsg = parsed.initialMessage || { subject: "", body: "", callToAction: "" };
+  if (initialMsg.callToAction && initialMsg.body) {
+    const lowerBody = initialMsg.body.toLowerCase();
+    const hasAvailability = lowerBody.includes("availability") || lowerBody.includes("available") || lowerBody.includes("this week") || lowerBody.includes("next week");
+    if (!hasAvailability && !initialMsg.body.includes(initialMsg.callToAction)) {
+      initialMsg.body = `${initialMsg.body.trim()}\n\n${initialMsg.callToAction.trim()}`;
+    }
+  }
+
   return {
     sourcingIntelligence: parsed.sourcingIntelligence || { candidateHook: "", targetValueProp: "" },
-    initialMessage: parsed.initialMessage || { subject: "", body: "", callToAction: "" },
+    initialMessage: initialMsg,
     followUpNudge: parsed.followUpNudge || { subject: "", body: "" },
     channel,
     tone,
