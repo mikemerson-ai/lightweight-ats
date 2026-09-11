@@ -49,6 +49,8 @@ export interface QuickAddSourcedCandidateInput {
   author_name?: string;
   address?: string;
   resume_text?: string | null;
+  resume_url?: string | null;
+  resume_storage_path?: string | null;
   sub_scores?: { functionalExperience?: number; requiredCredentials?: number; roleSpecificSkills?: number } | null;
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
 }
@@ -72,6 +74,8 @@ export interface Candidate {
   ai_summary?: string | null;
   fit_rating?: number | null;
   resume_text?: string | null;
+  resume_url?: string | null;
+  resume_storage_path?: string | null;
   sub_scores?: { functionalExperience?: number; requiredCredentials?: number; roleSpecificSkills?: number } | null;
   created_at: string;
   updated_at: string;
@@ -418,6 +422,12 @@ export async function quickAddSourcedCandidate(
   if (data.sub_scores) {
     insertPayload.sub_scores = data.sub_scores;
   }
+  if (data.resume_url) {
+    insertPayload.resume_url = data.resume_url;
+  }
+  if (data.resume_storage_path) {
+    insertPayload.resume_storage_path = data.resume_storage_path;
+  }
 
   let { data: candidate, error } = await supabase
     .from("candidates")
@@ -426,9 +436,11 @@ export async function quickAddSourcedCandidate(
     .single();
 
   // If column doesn't exist yet in the database schema, gracefully retry without new columns
-  if (error && (error.message?.includes("resume_text") || error.message?.includes("sub_scores"))) {
+  if (error && (error.message?.includes("resume_text") || error.message?.includes("sub_scores") || error.message?.includes("resume_url") || error.message?.includes("resume_storage_path"))) {
     delete insertPayload.resume_text;
     delete insertPayload.sub_scores;
+    delete insertPayload.resume_url;
+    delete insertPayload.resume_storage_path;
     const retry = await supabase
       .from("candidates")
       .insert(insertPayload)
@@ -641,10 +653,185 @@ export async function checkCandidateCompliance(
   };
 }
 
+export interface UploadResumeResult {
+  success: boolean;
+  resume_url?: string;
+  resume_storage_path?: string;
+  candidate?: Candidate;
+  error?: string;
+}
+
+export async function uploadCandidateResume(
+  candidateId: string,
+  formData: FormData
+): Promise<UploadResumeResult> {
+  const supabase = await createClient();
+  const file = formData.get("file") as File | null;
+  const authorName = (formData.get("authorName") as string) || "Recruiter";
+
+  if (!file || !(file instanceof File) || file.size === 0) {
+    return { success: false, error: "No resume file provided or file is empty." };
+  }
+
+  try {
+    // 1. Check if candidate already has an existing resume file and delete it from storage
+    const { data: candidate } = await supabase
+      .from("candidates")
+      .select("id, resume_storage_path")
+      .eq("id", candidateId)
+      .single();
+
+    if (candidate?.resume_storage_path) {
+      try {
+        await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
+      } catch (e) {
+        console.warn("Could not remove previous resume from storage:", e);
+      }
+    }
+
+    // 2. Upload file to Supabase storage
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = `${candidateId}/${Date.now()}_${cleanFileName}`;
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+    const { error: uploadError } = await supabase.storage
+      .from("resumes")
+      .upload(filePath, fileBuffer, {
+        contentType: file.type || "application/pdf",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      return { success: false, error: `Storage upload failed: ${uploadError.message}` };
+    }
+
+    // 3. Get public URL
+    const { data: { publicUrl } } = supabase.storage.from("resumes").getPublicUrl(filePath);
+
+    // 4. Update candidate record in DB
+    const updatePayload: Record<string, any> = {
+      resume_url: publicUrl,
+      resume_storage_path: filePath,
+      pending_resume: false,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { data: updatedCandidate, error: updateError } = await supabase
+      .from("candidates")
+      .update(updatePayload)
+      .eq("id", candidateId)
+      .select("*, jobs(title)")
+      .single();
+
+    if (updateError && (updateError.message?.includes("resume_url") || updateError.message?.includes("resume_storage_path"))) {
+      // Graceful retry without the columns if user hasn't run the migration yet
+      const fallbackRetry = await supabase
+        .from("candidates")
+        .update({
+          pending_resume: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", candidateId)
+        .select("*, jobs(title)")
+        .single();
+      updatedCandidate = fallbackRetry.data;
+      updateError = fallbackRetry.error;
+    }
+
+    if (updateError) {
+      return { success: false, error: `Failed to update candidate: ${updateError.message}` };
+    }
+
+    // 5. Activity log
+    await supabase.from("activity_logs").insert({
+      candidate_id: candidateId,
+      activity_type: "Resume Uploaded",
+      notes: `Uploaded resume: ${file.name}`,
+      author_name: authorName,
+    });
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return {
+      success: true,
+      resume_url: publicUrl,
+      resume_storage_path: filePath,
+      candidate: updatedCandidate as Candidate,
+    };
+  } catch (err: any) {
+    console.error("Error in uploadCandidateResume:", err);
+    return { success: false, error: err.message || "Failed to upload resume" };
+  }
+}
+
+export async function deleteCandidateResume(candidateId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { data: candidate } = await supabase
+    .from("candidates")
+    .select("resume_storage_path")
+    .eq("id", candidateId)
+    .single();
+
+  if (candidate?.resume_storage_path) {
+    try {
+      await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
+    } catch (e) {
+      console.warn("Failed to remove resume from storage:", e);
+    }
+  }
+
+  const { error } = await supabase
+    .from("candidates")
+    .update({
+      resume_url: null,
+      resume_storage_path: null,
+      pending_resume: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", candidateId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+  return { success: true };
+}
+
 export async function deleteCandidate(candidateId: string): Promise<void> {
   const supabase = await createClient();
 
-  // Delete associated records manually to ensure they are removed if cascading deletes aren't configured
+  // 1. Fetch candidate to check for stored resume file
+  const { data: candidate } = await supabase
+    .from("candidates")
+    .select("resume_storage_path")
+    .eq("id", candidateId)
+    .single();
+
+  // 2. Clean up stored resume file from Supabase Storage
+  if (candidate?.resume_storage_path) {
+    try {
+      await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
+    } catch (storageErr) {
+      console.error("Failed to delete resume file from storage:", storageErr);
+    }
+  }
+
+  // Also clean up any lingering files in the candidate's storage folder
+  try {
+    const { data: files } = await supabase.storage.from("resumes").list(candidateId);
+    if (files && files.length > 0) {
+      const pathsToDelete = files.map((f) => `${candidateId}/${f.name}`);
+      await supabase.storage.from("resumes").remove(pathsToDelete);
+    }
+  } catch (err) {
+    console.warn("Could not list/clean storage folder for candidate:", err);
+  }
+
+  // 3. Delete associated records manually to ensure they are removed if cascading deletes aren't configured
   await supabase.from("activity_logs").delete().eq("candidate_id", candidateId);
   await supabase.from("document_checklists").delete().eq("candidate_id", candidateId);
   await supabase.from("evaluations").delete().eq("candidate_id", candidateId);
@@ -723,11 +910,15 @@ export async function updateCandidateProfile(
     years_of_experience?: number | null;
     date_applied?: string;
     date_sourced?: string;
+    linkedin_url?: string | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
   const cleanData = { ...updateData };
+  if (cleanData.linkedin_url) {
+    cleanData.linkedin_url = cleanData.linkedin_url.trim();
+  }
   if (cleanData.email) {
     cleanData.email = ["not provided", "not available", "n/a"].includes(cleanData.email.trim().toLowerCase()) ? null : cleanData.email.trim();
   }

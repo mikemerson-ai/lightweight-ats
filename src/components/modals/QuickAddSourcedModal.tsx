@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
-import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume, type Candidate } from "@/app/actions/candidates";
+import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume, uploadCandidateResume, type Candidate } from "@/app/actions/candidates";
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import { parseResumeAction } from "@/app/actions/resumeParser";
@@ -217,7 +217,18 @@ export function QuickAddSourcedModal({
         throw new Error(res.error || "Failed to update candidate.");
       }
       
-      onCandidateAdded?.(res.candidate);
+      let finalCandidate = res.candidate;
+      if (resume && duplicateInfo?.existingRecord?.id) {
+        const uploadFormData = new FormData();
+        uploadFormData.set("file", resume);
+        uploadFormData.set("authorName", activeRecruiter?.name || "Recruiter");
+        const uploadRes = await uploadCandidateResume(duplicateInfo.existingRecord.id, uploadFormData);
+        if (uploadRes.success && uploadRes.candidate) {
+          finalCandidate = uploadRes.candidate;
+        }
+      }
+      
+      onCandidateAdded?.(finalCandidate);
       router.refresh();
       window.alert("Candidate resume and evaluation updated successfully");
       reset();
@@ -270,7 +281,18 @@ export function QuickAddSourcedModal({
         throw new Error(res.error || "Failed to add candidate.");
       }
 
-      onCandidateAdded?.(res.candidate);
+      let finalCandidate = res.candidate;
+      if (resume && res.candidate.id) {
+        const uploadFormData = new FormData();
+        uploadFormData.set("file", resume);
+        uploadFormData.set("authorName", activeRecruiter?.name || "Recruiter");
+        const uploadRes = await uploadCandidateResume(res.candidate.id, uploadFormData);
+        if (uploadRes.success && uploadRes.candidate) {
+          finalCandidate = uploadRes.candidate;
+        }
+      }
+
+      onCandidateAdded?.(finalCandidate);
       router.refresh();
       window.alert("Candidate successfully added");
       reset();

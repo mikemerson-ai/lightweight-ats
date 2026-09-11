@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Clock } from "lucide-react";
+import { Clock, FileText } from "lucide-react";
 import { type Candidate } from "@/app/actions/candidates";
 
 export type SourceBadgeVariant = "inbound" | "sourced" | "referral";
@@ -102,6 +102,32 @@ export function CandidateCard({
           {candidate.first_name} {candidate.last_name}
         </span>
         <div className="flex items-center gap-1 shrink-0">
+          {candidate.resume_url && (
+            <a
+              href={candidate.resume_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="View Resume (PDF)"
+              className="p-0.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            >
+              <FileText className="h-3.5 w-3.5" />
+            </a>
+          )}
+          {candidate.linkedin_url && (
+            <a
+              href={candidate.linkedin_url.startsWith("http") ? candidate.linkedin_url : `https://${candidate.linkedin_url}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="View LinkedIn Profile"
+              className="p-0.5 rounded text-slate-400 hover:text-[#0A66C2] hover:bg-blue-50 transition-colors"
+            >
+              <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.64 1.64 0 1 0-.02-3.28 1.64 1.64 0 0 0 .02 3.28m1.39 9.74v-8.37H5.07v8.37h2.78z" />
+              </svg>
+            </a>
+          )}
           {candidate.dnh_flag && (
             <span className="rounded-sm bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-700 uppercase leading-none border border-red-200" title="Do Not Hire">
               DNH

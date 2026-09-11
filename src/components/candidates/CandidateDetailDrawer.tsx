@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit, RefreshCw } from "lucide-react";
+import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit, RefreshCw, FileText, Upload } from "lucide-react";
 import {
   type Candidate,
   getCandidateActivity,
@@ -10,6 +10,7 @@ import {
   addCandidateNote,
   updateCandidateProfile,
   reEvaluateCandidateFit,
+  uploadCandidateResume,
   type ActivityLogEntry,
 } from "@/app/actions/candidates";
 import {
@@ -295,6 +296,7 @@ export function CandidateDetailDrawer({
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [editForm, setEditForm] = useState({
     first_name: "",
     last_name: "",
@@ -305,6 +307,7 @@ export function CandidateDetailDrawer({
     years_of_experience: "" as string | number,
     date_applied: "",
     date_sourced: "",
+    linkedin_url: "",
   });
 
   const { activeRecruiter } = useRecruiter();
@@ -318,6 +321,7 @@ export function CandidateDetailDrawer({
         years_of_experience: editForm.years_of_experience ? Number(editForm.years_of_experience) : null,
         date_applied: editForm.date_applied || undefined,
         date_sourced: editForm.date_sourced || undefined,
+        linkedin_url: editForm.linkedin_url || undefined,
       });
       setShowEditModal(false);
       window.location.reload();
@@ -325,6 +329,31 @@ export function CandidateDetailDrawer({
       alert("Failed to update profile: " + err.message);
     } finally {
       setIsSavingProfile(false);
+    }
+  }
+
+  async function handleResumeUpload(file: File) {
+    if (!activeCandidate) return;
+    setIsUploadingResume(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("authorName", activeRecruiter?.name || "Recruiter");
+      const res = await uploadCandidateResume(activeCandidate.id, formData);
+      if (res.success && res.candidate) {
+        setLocalCandidate(res.candidate);
+        onCandidateUpdated?.(res.candidate);
+        const updatedActivity = await getCandidateActivity(activeCandidate.id);
+        setActivity(updatedActivity);
+        alert("Resume uploaded successfully!");
+      } else {
+        alert(res.error || "Failed to upload resume.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to upload resume.");
+    } finally {
+      setIsUploadingResume(false);
     }
   }
 
@@ -454,6 +483,7 @@ export function CandidateDetailDrawer({
         years_of_experience: candidate.years_of_experience || "",
         date_applied: candidate.date_applied ? candidate.date_applied.split("T")[0] : "",
         date_sourced: candidate.date_sourced ? candidate.date_sourced.split("T")[0] : "",
+        linkedin_url: candidate.linkedin_url || "",
       });
     }
   }, [candidate, activeRecruiter]);
@@ -545,7 +575,23 @@ export function CandidateDetailDrawer({
                   type="button"
                   aria-label="Edit candidate profile"
                   className="flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/20 transition-colors"
-                  onClick={() => setShowEditModal(true)}
+                  onClick={() => {
+                    if (activeCandidate) {
+                      setEditForm({
+                        first_name: activeCandidate.first_name || "",
+                        last_name: activeCandidate.last_name || "",
+                        email: activeCandidate.email || "",
+                        phone: activeCandidate.phone || "",
+                        address: activeCandidate.address || "",
+                        primary_skills: activeCandidate.primary_skills || "",
+                        years_of_experience: activeCandidate.years_of_experience ?? "",
+                        date_applied: activeCandidate.date_applied?.split("T")[0] || "",
+                        date_sourced: activeCandidate.date_sourced?.split("T")[0] || "",
+                        linkedin_url: activeCandidate.linkedin_url || "",
+                      });
+                    }
+                    setShowEditModal(true);
+                  }}
                 >
                   <Edit className="h-3.5 w-3.5" />
                   Edit
@@ -658,6 +704,20 @@ export function CandidateDetailDrawer({
                   <MapPin className="h-3.5 w-3.5" /> {candidate.address}
                 </span>
               )}
+              {candidate.linkedin_url && (
+                <a
+                  href={candidate.linkedin_url.startsWith("http") ? candidate.linkedin_url : `https://${candidate.linkedin_url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sky-200 hover:text-white underline transition-colors"
+                  title="Open LinkedIn Profile"
+                >
+                  <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.64 1.64 0 1 0-.02-3.28 1.64 1.64 0 0 0 .02 3.28m1.39 9.74v-8.37H5.07v8.37h2.78z" />
+                  </svg>
+                  LinkedIn
+                </a>
+              )}
             </div>
           </div>
           
@@ -744,6 +804,10 @@ export function CandidateDetailDrawer({
                       <input type="text" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="City, State" />
                     </div>
                     <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">LinkedIn Profile URL</label>
+                      <input type="url" value={editForm.linkedin_url} onChange={(e) => setEditForm({...editForm, linkedin_url: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="https://linkedin.com/in/username" />
+                    </div>
+                    <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">Primary Skills (comma separated)</label>
                       <input type="text" value={editForm.primary_skills} onChange={(e) => setEditForm({...editForm, primary_skills: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                     </div>
@@ -809,7 +873,71 @@ export function CandidateDetailDrawer({
                 </div>
               </div>
             )}
-            
+
+            {/* Candidate Resume Document Card */}
+            <section className="rounded-xl border bg-white p-4 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-lg shrink-0 ${activeCandidate?.resume_url ? "bg-rose-50 text-rose-600 border border-rose-100" : "bg-slate-100 text-slate-400"}`}>
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-slate-800">Uploaded Resume</h4>
+                      {activeCandidate?.resume_url ? (
+                        <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold">
+                          PDF Available
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold">
+                          No File Uploaded
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {activeCandidate?.resume_url
+                        ? "Stored in Supabase. Click below to view in a new tab."
+                        : "Upload a PDF, DOCX, or TXT resume for this candidate when ready."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {activeCandidate?.resume_url && (
+                    <a
+                      href={activeCandidate.resume_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-2xs transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+                      View PDF
+                    </a>
+                  )}
+
+                  <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer shadow-2xs transition-colors ${
+                    activeCandidate?.resume_url
+                      ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                      : "bg-primary hover:bg-primary/90 text-white"
+                  } ${isUploadingResume ? "opacity-50 pointer-events-none" : ""}`}>
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>{isUploadingResume ? "Uploading..." : activeCandidate?.resume_url ? "Replace File" : "Upload Resume"}</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleResumeUpload(file);
+                        e.target.value = "";
+                      }}
+                      disabled={isUploadingResume}
+                    />
+                  </label>
+                </div>
+              </div>
+            </section>
+
             <section className="rounded-xl border bg-white p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
