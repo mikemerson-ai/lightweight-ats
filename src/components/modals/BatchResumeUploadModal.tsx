@@ -45,7 +45,7 @@ interface BatchResumeUploadModalProps {
 interface FileQueueItem {
   id: string;
   file: File;
-  status: "waiting" | "parsing" | "done" | "error";
+  status: "waiting" | "parsing" | "done" | "imported" | "error";
   error?: string;
   parsedData?: ParsedCandidate;
   selectedForImport: boolean;
@@ -126,17 +126,26 @@ export function BatchResumeUploadModal({
 
   function toggleSelect(id: string) {
     setQueue((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, selectedForImport: !item.selectedForImport } : item))
+      prev.map((item) =>
+        item.id === id && item.status !== "imported"
+          ? { ...item, selectedForImport: !item.selectedForImport }
+          : item
+      )
     );
   }
 
   function toggleSelectAll(selected: boolean) {
-    setQueue((prev) => prev.map((item) => ({ ...item, selectedForImport: selected })));
+    setQueue((prev) =>
+      prev.map((item) =>
+        item.status === "done" ? { ...item, selectedForImport: selected } : item
+      )
+    );
   }
 
   function selectNewOnly() {
     setQueue((prev) =>
       prev.map((item) => {
+        if (item.status !== "done") return item;
         const dup = duplicates[item.id];
         const isSameJobDup = dup?.isDuplicate && dup.sameJob;
         return {
@@ -296,7 +305,9 @@ export function BatchResumeUploadModal({
   }
 
   // Sort completed candidates
-  const parsedItems = queue.filter((item) => item.status === "done" && item.parsedData);
+  const parsedItems = queue.filter(
+    (item) => (item.status === "done" || item.status === "imported") && item.parsedData
+  );
   const sortedParsedItems = [...parsedItems].sort((a, b) => {
     if (sortOrder === "fitDesc") {
       const scoreA = a.parsedData?.fitRating ?? 0;
@@ -306,19 +317,21 @@ export function BatchResumeUploadModal({
     return 0;
   });
 
-  const selectedCount = sortedParsedItems.filter((item) => item.selectedForImport).length;
+  const unimportedItems = sortedParsedItems.filter((item) => item.status !== "imported");
+  const allDoneImported = sortedParsedItems.length > 0 && unimportedItems.length === 0;
+  const selectedCount = sortedParsedItems.filter((item) => item.selectedForImport && item.status === "done").length;
 
   // Duplicate statistics for review banner
-  const sameJobDupCount = sortedParsedItems.filter(
+  const sameJobDupCount = unimportedItems.filter(
     (item) => duplicates[item.id]?.isDuplicate && duplicates[item.id]?.sameJob
   ).length;
-  const differentJobDupCount = sortedParsedItems.filter(
+  const differentJobDupCount = unimportedItems.filter(
     (item) => duplicates[item.id]?.isDuplicate && !duplicates[item.id]?.sameJob
   ).length;
-  const dnhCount = sortedParsedItems.filter(
+  const dnhCount = unimportedItems.filter(
     (item) => duplicates[item.id]?.existingRecord?.dnh_flag
   ).length;
-  const batchInternalDupCount = sortedParsedItems.filter(
+  const batchInternalDupCount = unimportedItems.filter(
     (item) => duplicates[item.id]?.isBatchInternalDuplicate
   ).length;
 
@@ -326,7 +339,9 @@ export function BatchResumeUploadModal({
     const targetJobId = selectedJobId || defaultJobId;
     if (!targetJobId) return;
 
-    const selectedItems = sortedParsedItems.filter((item) => item.selectedForImport && item.parsedData);
+    const selectedItems = sortedParsedItems.filter(
+      (item) => item.selectedForImport && item.status === "done" && item.parsedData
+    );
 
     if (selectedItems.length === 0) {
       alert("No candidates selected for import.");
@@ -349,7 +364,7 @@ export function BatchResumeUploadModal({
     );
     if (hasSameJobSelected) {
       const confirmDup = window.confirm(
-        "One or more selected candidates already exist in this job opening. Do you still want to proceed and create additional application records?"
+        "One or more selected candidates already exist in this job opening. Importing them will update their candidate profile, latest resume, and AI fit evaluation. Do you want to proceed?"
       );
       if (!confirmDup) return;
     }
@@ -408,6 +423,19 @@ export function BatchResumeUploadModal({
             }
           }
         }
+
+        // Mark successfully imported candidates in the queue so they cannot be re-imported
+        const importedQueueIds = new Set(
+          res.importedCandidates.map((imp) => imp.queue_id).filter(Boolean)
+        );
+        setQueue((prevQueue) =>
+          prevQueue.map((item) => {
+            if (importedQueueIds.has(item.id)) {
+              return { ...item, status: "imported", selectedForImport: false };
+            }
+            return item;
+          })
+        );
       }
 
       setImportSummary({ successCount: res.count, errors: res.errors });
@@ -654,9 +682,10 @@ export function BatchResumeUploadModal({
                         <th className="py-2.5 px-3 w-8">
                           <input
                             type="checkbox"
-                            checked={sortedParsedItems.length > 0 && selectedCount === sortedParsedItems.length}
+                            disabled={unimportedItems.length === 0}
+                            checked={unimportedItems.length > 0 && selectedCount === unimportedItems.length}
                             onChange={(e) => toggleSelectAll(e.target.checked)}
-                            className="rounded text-secondary focus:ring-secondary/30 cursor-pointer"
+                            className="rounded text-secondary focus:ring-secondary/30 cursor-pointer disabled:opacity-40"
                           />
                         </th>
                         <th className="py-2.5 px-3">File / Candidate</th>
@@ -674,14 +703,18 @@ export function BatchResumeUploadModal({
                         return (
                           <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                             <td className="py-3 px-3">
-                              {item.status === "done" && (
+                              {item.status === "imported" ? (
+                                <span className="inline-flex items-center justify-center text-emerald-600" title="Already imported into pipeline">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </span>
+                              ) : item.status === "done" ? (
                                 <input
                                   type="checkbox"
                                   checked={item.selectedForImport}
                                   onChange={() => toggleSelect(item.id)}
                                   className="rounded text-secondary focus:ring-secondary/30 cursor-pointer"
                                 />
-                              )}
+                              ) : null}
                             </td>
                             <td className="py-3 px-3 font-medium text-slate-900">
                               {parsed ? (
@@ -813,6 +846,11 @@ export function BatchResumeUploadModal({
                                   <Loader2 className="h-3 w-3 animate-spin" /> Parsing
                                 </span>
                               )}
+                              {item.status === "imported" && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-800 font-semibold text-[11px]">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Ingested
+                                </span>
+                              )}
                               {item.status === "done" && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 font-medium">
                                   <CheckCircle2 className="h-3 w-3" /> Ready
@@ -857,9 +895,19 @@ export function BatchResumeUploadModal({
               }`}
             >
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                {importSummary.successCount > 0 ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                )}
                 <span>
-                  Successfully imported <strong>{importSummary.successCount} candidates</strong> into the New Application stage!
+                  {importSummary.successCount > 0 ? (
+                    <>
+                      Successfully ingested / updated <strong>{importSummary.successCount} candidate{importSummary.successCount > 1 ? "s" : ""}</strong> into {currentJob?.title ? `"${currentJob.title}"` : "the New Application stage"}!
+                    </>
+                  ) : (
+                    <strong>Could not import candidates:</strong>
+                  )}
                 </span>
               </div>
               {importSummary.errors && importSummary.errors.length > 0 && (
@@ -878,8 +926,8 @@ export function BatchResumeUploadModal({
           <div className="text-xs text-slate-500 font-medium">
             {parsedItems.length > 0 ? (
               <span>
-                <strong>{selectedCount}</strong> of {parsedItems.length} parsed candidates selected
-                {sameJobDupCount > 0 && (
+                <strong>{allDoneImported ? parsedItems.length : selectedCount}</strong> of {parsedItems.length} parsed candidates {allDoneImported ? "ingested" : "selected"}
+                {sameJobDupCount > 0 && !allDoneImported && (
                   <span className="ml-1 text-amber-600">({sameJobDupCount} same-job duplicate unselected)</span>
                 )}
               </span>
@@ -895,7 +943,7 @@ export function BatchResumeUploadModal({
               disabled={isProcessing || isImporting}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer"
             >
-              {importSummary?.successCount ? "Close" : "Cancel"}
+              {allDoneImported || importSummary?.successCount ? "Close" : "Cancel"}
             </button>
 
             {parsedItems.length === 0 ? (
@@ -908,7 +956,7 @@ export function BatchResumeUploadModal({
                 {isProcessing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin text-secondary" />
-                    <span>Parsing Batch ({queue.filter((q) => q.status === "done").length}/{queue.length})...</span>
+                    <span>Parsing Batch ({queue.filter((q) => q.status === "done" || q.status === "imported").length}/{queue.length})...</span>
                   </>
                 ) : (
                   <>
@@ -916,6 +964,15 @@ export function BatchResumeUploadModal({
                     <span>Parse {queue.length} Resumes</span>
                   </>
                 )}
+              </button>
+            ) : allDoneImported ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition shadow-xs cursor-pointer"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Done</span>
               </button>
             ) : (
               <button
@@ -935,7 +992,7 @@ export function BatchResumeUploadModal({
                     <span>Checking Duplicates...</span>
                   </>
                 ) : (
-                  <span>Import {selectedCount} Candidates</span>
+                  <span>Import {selectedCount} Candidate{selectedCount > 1 ? "s" : ""}</span>
                 )}
               </button>
             )}

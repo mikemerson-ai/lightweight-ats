@@ -297,10 +297,11 @@ export async function checkBatchCandidateDuplicates(
   const matchedDbCandidates: any[] = [];
 
   if (validEmails.length > 0) {
+    const orClause = validEmails.map((e) => `email.ilike.${e}`).join(",");
     const { data: emailMatches } = await supabase
       .from("candidates")
       .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag, jobs(title)")
-      .in("email", validEmails);
+      .or(orClause);
     if (emailMatches) matchedDbCandidates.push(...emailMatches);
   }
 
@@ -1194,7 +1195,7 @@ export async function bulkAddCandidates(
     const errors: string[] = [];
 
     for (const data of candidatesData) {
-      const emailVal = (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim();
+      const emailVal = (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim().toLowerCase();
       const phoneVal = (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim();
       const today = new Date().toISOString().split("T")[0];
       const isSourced = data.source_type === "outbound" || data.source_type === "sourced";
@@ -1239,6 +1240,86 @@ export async function bulkAddCandidates(
           .single();
         candidate = retry.data;
         error = retry.error;
+      }
+
+      // If candidate already exists in this job requisition (idx_unique_candidate_per_job)
+      if (
+        error &&
+        (error.code === "23505" ||
+          error.message?.includes("idx_unique_candidate_per_job") ||
+          error.message?.includes("duplicate key value"))
+      ) {
+        if (emailVal) {
+          const { data: existing } = await supabase
+            .from("candidates")
+            .select("id, first_name, last_name, dnh_flag")
+            .eq("job_id", data.job_id)
+            .ilike("email", emailVal)
+            .maybeSingle();
+
+          if (existing) {
+            if (existing.dnh_flag) {
+              errors.push(`${data.first_name} ${data.last_name} is marked as Do Not Hire (DNH) and was skipped.`);
+              continue;
+            }
+
+            // Update candidate with latest resume details, evaluation, and rating
+            const updatePayload: any = {
+              updated_at: new Date().toISOString(),
+              pending_resume: false,
+            };
+            if (data.first_name) updatePayload.first_name = data.first_name;
+            if (data.last_name) updatePayload.last_name = data.last_name;
+            if (data.phone) updatePayload.phone = data.phone;
+            if (data.address) updatePayload.address = data.address;
+            if (data.primary_skills) updatePayload.primary_skills = data.primary_skills;
+            if (typeof data.years_of_experience === "number") updatePayload.years_of_experience = data.years_of_experience;
+            if (data.ai_summary) updatePayload.ai_summary = data.ai_summary;
+            if (typeof data.fit_rating === "number") updatePayload.fit_rating = data.fit_rating;
+            if (data.sub_scores) updatePayload.sub_scores = data.sub_scores;
+            if (data.resume_text) updatePayload.resume_text = data.resume_text;
+            if (data.work_experience) updatePayload.work_experience = data.work_experience;
+
+            let { data: updatedCandidate, error: updateErr } = await supabase
+              .from("candidates")
+              .update(updatePayload)
+              .eq("id", existing.id)
+              .select("*, jobs(title)")
+              .single();
+
+            if (updateErr && (updateErr.message?.includes("resume_text") || updateErr.message?.includes("sub_scores"))) {
+              delete updatePayload.resume_text;
+              delete updatePayload.sub_scores;
+              const retryUpdate = await supabase
+                .from("candidates")
+                .update(updatePayload)
+                .eq("id", existing.id)
+                .select("*, jobs(title)")
+                .single();
+              updatedCandidate = retryUpdate.data;
+              updateErr = retryUpdate.error;
+            }
+
+            if (updateErr) {
+              errors.push(`Failed to update ${data.first_name} ${data.last_name}: ${updateErr.message}`);
+              continue;
+            }
+
+            if (updatedCandidate) {
+              imported.push({ ...(updatedCandidate as Candidate), queue_id: data.queue_id });
+              await supabase.from("activity_logs").insert({
+                candidate_id: existing.id,
+                activity_type: "Resume Updated",
+                notes: `Candidate profile & evaluation updated via AI Batch Ingestion: ${data.fit_rating ?? 0}/5 fit rating`,
+                author_name: data.author_name || "Recruiter",
+              });
+              continue;
+            }
+          }
+        }
+
+        errors.push(`${data.first_name} ${data.last_name}: A candidate with this email already exists in this requisition.`);
+        continue;
       }
 
       if (error) {
