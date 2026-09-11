@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Upload, Loader2, CheckCircle2, AlertCircle, Sparkles, FileText, ArrowUpDown, Trash2 } from "lucide-react";
 import { type Job } from "@/app/actions/jobs";
 import { type Candidate, bulkAddCandidates, type BatchImportCandidateInput } from "@/app/actions/candidates";
@@ -14,7 +14,7 @@ interface BatchResumeUploadModalProps {
   onClose: () => void;
   jobs: Job[];
   defaultJobId?: string | null;
-  onCandidatesAdded?: () => void;
+  onCandidatesAdded?: (targetJobId: string) => void;
 }
 
 interface FileQueueItem {
@@ -34,6 +34,12 @@ export function BatchResumeUploadModal({
   onCandidatesAdded,
 }: BatchResumeUploadModalProps) {
   const [selectedJobId, setSelectedJobId] = useState<string>(defaultJobId || "");
+
+  useEffect(() => {
+    if (open && defaultJobId) {
+      setSelectedJobId(defaultJobId);
+    }
+  }, [open, defaultJobId]);
   const [sourceChannel, setSourceChannel] = useState<string>("Job Board / Career Site");
   const [queue, setQueue] = useState<FileQueueItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -211,7 +217,7 @@ export function BatchResumeUploadModal({
       const res = await bulkAddCandidates(candidatesToImport);
       setImportSummary({ successCount: res.count, errors: res.errors });
       if (res.success) {
-        onCandidatesAdded?.();
+        onCandidatesAdded?.(targetJobId);
         router.refresh();
       }
     } catch (err: any) {

@@ -13,19 +13,21 @@ import { useRecruiter } from "@/context/RecruiterContext";
 interface QuickAddSourcedModalProps {
   open: boolean;
   onClose: () => void;
+  defaultJobId?: string | null;
   onCandidateAdded?: (candidate: Candidate) => void;
 }
 
 export function QuickAddSourcedModal({
   open,
   onClose,
+  defaultJobId,
   onCandidateAdded,
 }: QuickAddSourcedModalProps) {
   const [fullName, setFullName] = useState("");
   const [candidateOrigin, setCandidateOrigin] = useState<"sourced" | "applied">("applied");
   const [eventDate, setEventDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [sourceChannel, setSourceChannel] = useState("");
-  const [targetJob, setTargetJob] = useState("");
+  const [targetJob, setTargetJob] = useState(defaultJobId || "");
   const [contactInfo, setContactInfo] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -53,13 +55,16 @@ export function QuickAddSourcedModal({
 
   useEffect(() => {
     if (open) {
+      if (defaultJobId) {
+        setTargetJob(defaultJobId);
+      }
       getJobs()
         .then((activeJobs) =>
           setJobs(activeJobs.filter((job) => job.status === "Active")),
         )
         .catch(() => setJobs([]));
     }
-  }, [open]);
+  }, [open, defaultJobId]);
 
   const nameParts = fullName.trim().split(/\s+/);
   const firstName = nameParts[0] ?? "";
@@ -97,7 +102,7 @@ export function QuickAddSourcedModal({
     setCandidateOrigin("applied");
     setEventDate(new Date().toISOString().split("T")[0]);
     setSourceChannel("");
-    setTargetJob("");
+    setTargetJob(defaultJobId || "");
     setContactInfo("");
     setEmail("");
     setPhone("");

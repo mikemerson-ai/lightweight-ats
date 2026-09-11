@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Job, getJobs, deleteJob } from "@/app/actions/jobs";
 import type { Candidate } from "@/app/actions/candidates";
 import { SearchBar } from "./search/SearchBar";
@@ -14,11 +14,26 @@ import { ScorecardBuilderModal } from "./modals/ScorecardBuilderModal";
 import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList, LayoutGrid, List, Files } from "lucide-react";
 import RecruiterSwitcher from "./layout/RecruiterSwitcher";
 
-export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
+export function DashboardClient({
+  initialJobs,
+  initialJobId,
+}: {
+  initialJobs: Job[];
+  initialJobId?: string | null;
+}) {
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(
-    initialJobs.length > 0 ? initialJobs[0].id : null
-  );
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(() => {
+    if (initialJobId && initialJobs.some((j) => j.id === initialJobId)) {
+      return initialJobId;
+    }
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("ats_selected_job_id");
+      if (stored && initialJobs.some((j) => j.id === stored)) {
+        return stored;
+      }
+    }
+    return initialJobs.length > 0 ? initialJobs[0].id : null;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "inbound" | "outbound">("all");
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
@@ -36,11 +51,68 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
 
   const kanbanRef = useRef<KanbanBoardRef>(null);
 
+  const changeSelectedJob = (jobId: string | null) => {
+    setSelectedJobId(jobId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (jobId) {
+        localStorage.setItem("ats_selected_job_id", jobId);
+        url.searchParams.set("jobId", jobId);
+      } else {
+        localStorage.removeItem("ats_selected_job_id");
+        url.searchParams.delete("jobId");
+      }
+      window.history.replaceState(null, "", url.toString());
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlJobId = urlParams.get("jobId");
+    const storedJobId = localStorage.getItem("ats_selected_job_id");
+
+    let resolvedId: string | null = null;
+    if (urlJobId && jobs.some((j) => j.id === urlJobId)) {
+      resolvedId = urlJobId;
+    } else if (storedJobId && jobs.some((j) => j.id === storedJobId)) {
+      resolvedId = storedJobId;
+    } else if (initialJobId && jobs.some((j) => j.id === initialJobId)) {
+      resolvedId = initialJobId;
+    } else if (jobs.length > 0) {
+      resolvedId = jobs[0].id;
+    }
+
+    if (resolvedId && resolvedId !== selectedJobId) {
+      changeSelectedJob(resolvedId);
+    } else if (resolvedId) {
+      localStorage.setItem("ats_selected_job_id", resolvedId);
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("jobId") !== resolvedId) {
+        url.searchParams.set("jobId", resolvedId);
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const popJobId = params.get("jobId");
+      if (popJobId && jobs.some((j) => j.id === popJobId)) {
+        setSelectedJobId(popJobId);
+        localStorage.setItem("ats_selected_job_id", popJobId);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [jobs]);
+
   const handleJobCreated = async () => {
     const updatedJobs = await getJobs();
     setJobs(updatedJobs);
-    if (updatedJobs.length > 0 && !selectedJobId) {
-      setSelectedJobId(updatedJobs[0].id);
+    if (updatedJobs.length > 0) {
+      changeSelectedJob(updatedJobs[0].id);
     }
   };
 
@@ -61,7 +133,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
       await deleteJob(selectedJobId, forceCascade);
       const updatedJobs = await getJobs();
       setJobs(updatedJobs);
-      setSelectedJobId(updatedJobs.length > 0 ? updatedJobs[0].id : null);
+      changeSelectedJob(updatedJobs.length > 0 ? updatedJobs[0].id : null);
       setDeleteConfirmOpen(false);
       setDeleteCascadePrompt(false);
     } catch (err: any) {
@@ -77,7 +149,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
 
   const handleSearchSelect = (candidate: Candidate) => {
     if (candidate.job_id !== selectedJobId) {
-      setSelectedJobId(candidate.job_id);
+      changeSelectedJob(candidate.job_id);
     }
     // Wait for the KanbanBoard to update if job changed
     setTimeout(() => {
@@ -95,7 +167,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
             <div className="flex items-center gap-2">
               <select
                 value={selectedJobId || ""}
-                onChange={(e) => setSelectedJobId(e.target.value)}
+                onChange={(e) => changeSelectedJob(e.target.value)}
                 className="w-[250px] rounded-md bg-slate-50 border border-slate-300 px-3 py-2 text-sm text-[#0F2C59]"
               >
                 <option value="" disabled>
@@ -240,8 +312,13 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
       <QuickAddSourcedModal
         open={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
+        defaultJobId={selectedJobId}
         onCandidateAdded={(newCandidate) => {
-          kanbanRef.current?.addCandidate(newCandidate);
+          if (newCandidate.job_id && newCandidate.job_id !== selectedJobId) {
+            changeSelectedJob(newCandidate.job_id);
+          } else {
+            kanbanRef.current?.addCandidate(newCandidate);
+          }
         }}
       />
 
@@ -250,10 +327,12 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
         onClose={() => setBatchUploadOpen(false)}
         jobs={jobs}
         defaultJobId={selectedJobId}
-        onCandidatesAdded={() => {
-          const currentId = selectedJobId;
-          setSelectedJobId(null);
-          setTimeout(() => setSelectedJobId(currentId), 20);
+        onCandidatesAdded={(targetJobId: string) => {
+          const finalJobId = targetJobId || selectedJobId;
+          if (finalJobId) {
+            changeSelectedJob(finalJobId);
+          }
+          kanbanRef.current?.refresh();
         }}
       />
 

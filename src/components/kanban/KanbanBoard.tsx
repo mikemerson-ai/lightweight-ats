@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useState, forwardRef, useImperativeHandle, useCallback } from "react";
 import { type DragEndEvent } from "@dnd-kit/core";
 import { Star } from "lucide-react";
 import {
@@ -54,6 +54,7 @@ export interface KanbanBoardProps {
 export interface KanbanBoardRef {
   addCandidate: (newCandidate: Candidate) => void;
   openCandidate: (candidate: Candidate) => void;
+  refresh: () => void;
 }
 
 export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function KanbanBoard({
@@ -73,29 +74,37 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
 
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
+  const loadCandidates = useCallback(async (targetId: string) => {
+    try {
+      const data = await getCandidatesByJob(targetId);
+      setCandidates(data);
+      setLoadedJobId(targetId);
+    } catch {
+      setCandidates([]);
+      setLoadedJobId(targetId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!jobId) {
+      return;
+    }
+    loadCandidates(jobId);
+  }, [jobId, loadCandidates]);
+
   useImperativeHandle(ref, () => ({
     addCandidate: (newCandidate) => {
       setCandidates((prev) => [newCandidate, ...prev.filter(c => c.id !== newCandidate.id)]);
     },
     openCandidate: (candidate) => {
       setSelectedCandidate(candidate);
-    }
+    },
+    refresh: () => {
+      if (jobId) {
+        loadCandidates(jobId);
+      }
+    },
   }));
-
-  useEffect(() => {
-    if (!jobId) {
-      return;
-    }
-    getCandidatesByJob(jobId)
-      .then((data) => {
-        setCandidates(data);
-        setLoadedJobId(jobId);
-      })
-      .catch(() => {
-        setCandidates([]);
-        setLoadedJobId(jobId);
-      });
-  }, [jobId]);
 
   const loading = Boolean(jobId && loadedJobId !== jobId);
 
