@@ -27,10 +27,19 @@ export interface GenerateOutreachInput {
 }
 
 export interface OutreachResult {
-  subject: string;
-  body: string;
-  keyHighlights?: string[];
-  callToAction: string;
+  sourcingIntelligence: {
+    candidateHook: string;
+    targetValueProp: string;
+  };
+  initialMessage: {
+    subject: string;
+    body: string;
+    callToAction: string;
+  };
+  followUpNudge: {
+    subject: string;
+    body: string;
+  };
   channel: OutreachChannel;
   tone: OutreachTone;
 }
@@ -57,18 +66,18 @@ export async function generateOutreachMessage(
     professional:
       "Maintain a polished, executive, and business-focused tone. Highlight clear career progression and alignment with role responsibilities.",
     warm:
-      "Write with genuine enthusiasm, personality, and human warmth. Build rapport while remaining articulate and respectful.",
+      "Write with genuine enthusiasm, personality, and human warmth. Build rapport while remaining articulate and respectful. Avoid cheesy flattery.",
     concise:
-      "Keep it brief, punchy, and modern (under 120 words). Cut filler words and get straight to why their profile stood out and the value proposition.",
+      "Keep it ultra-brief, punchy, and modern (under 75 words). Peer-to-peer / engineer-to-engineer style. Cut filler words and get straight to the technical problem.",
   };
 
   const channelGuidelines: Record<OutreachChannel, string> = {
     email:
-      "Format as a high-converting recruiter cold email. Provide an engaging, relevant subject line (under 60 chars, avoid spam triggers). Use 2-3 short paragraphs, clear spacing, and a professional closing.",
+      "Format as a high-converting recruiter cold email (75-125 words). Provide an engaging, relevant subject line (under 60 chars, avoid spam triggers). Use 2-3 short paragraphs, clear spacing.",
     linkedin:
-      "Format as a LinkedIn InMail or connection message. Provide a concise, intriguing message subject/headline. Keep the body conversational, mobile-friendly, and under 150 words.",
+      "Format as a LinkedIn InMail or connection message (<85 words). Provide a concise, intriguing message headline. Keep the body conversational and mobile-friendly.",
     indeed:
-      "Format as an Indeed direct candidate message. Reference the job posting clearly, note what in their profile caught the recruiter's eye, and invite them to discuss next steps.",
+      "Format as an Indeed direct candidate message (75-110 words). Reference the job posting clearly, note what in their resume caught your eye over other applicants, invite them to explore.",
   };
 
   let experienceSummary = "";
@@ -82,10 +91,18 @@ export async function generateOutreachMessage(
       .join("\n");
   }
 
-  const prompt = `You are an elite, top-tier tech and executive recruiter craft outreach messages that candidates actually open, read, and reply to.
+  const prompt = `You are an elite Talent Sourcing Specialist and Executive Search Consultant. 
+Your task is to generate high-converting, personalized candidate outreach messages by cross-referencing a Target Job Description against a Candidate Profile.
 
-YOUR OBJECTIVE:
-Generate a bespoke, high-converting candidate outreach message tailored specifically to this candidate and target role.
+CORE TENETS & ANTI-PATTERNS (CRITICAL INSTRUCTIONS):
+1. Zero Generic Fluff: NEVER use phrases like "I hope this email finds you well," "I came across your impressive profile," or "You seem like a great fit."
+2. The "One Concrete Artifact" Rule: The email MUST cite at least one specific technical or business accomplishment from the candidate's background (e.g., a specific stack migration, team expansion, or metric achieved) to prove genuine personalization.
+3. WIIFM (What's In It For Them): Position the role as a logical next step, compelling career challenge, or high-scale technical problem, not just a list of hiring requirements.
+4. Low-Friction Call-to-Action (CTA): End with a casual, zero-pressure conversation starter (e.g., "Open to a brief chat next week?" or "Worth a quick exchange?"). NO calendar links.
+5. Elite Recruiter Anti-Patterns:
+   - NO mentioning salary/comp too early unless explicitly requested in custom instructions.
+   - NO fake deadlines or aggressive timelines ("Please reply by Friday", "Urgent requirement").
+   - NO desperation. Maintain equal business stature.
 
 TARGET ROLE:
 Title: ${jobTitle}
@@ -109,37 +126,62 @@ PARAMETERS:
 - Desired Tone: ${tone.toUpperCase()} (${toneGuidelines[tone]})
 ${customPrompt ? `- Recruiter Custom Instructions: ${customPrompt}` : ""}
 
-GOLDEN RULES FOR THE OUTREACH:
-1. NEVER sound like a generic mass-blast bot. Pinpoint 1-2 real specifics from their experience (e.g. past companies, projects, or skill overlap).
-2. Clearly explain WHY this specific role is a compelling next step for them.
-3. Keep the Call to Action (CTA) low friction (e.g., "Open to a brief 10-minute introductory chat this week?", not "Send me your availability for a 1-hour interview").
-4. Use the candidate's first name in the greeting.
-5. Sign off cleanly with the recruiter's name.`;
+EXECUTION WORKFLOW:
+1. Signal Extraction: Find the most high-signal proof point from the candidate's profile (the Hook) and the primary value hook from the JD (Target Value Prop).
+2. Generate Initial Message: Apply the tenets and constraints to write the main outreach.
+3. Generate Follow-Up Nudge: Write a 30-50 word lightweight second touchpoint (Day 4 Nudge) referencing the original message and candidate hook, designed primarily for Email/InMail.`;
 
   const schema = {
     type: Type.OBJECT,
     properties: {
-      subject: {
-        type: Type.STRING,
-        description: "Compelling, high-open-rate subject line or message headline.",
+      sourcingIntelligence: {
+        type: Type.OBJECT,
+        properties: {
+          candidateHook: {
+            type: Type.STRING,
+            description: "Specific project, tool, or achievement selected from profile.",
+          },
+          targetValueProp: {
+            type: Type.STRING,
+            description: "The specific challenge/opportunity in the JD matched to this hook.",
+          },
+        },
+        required: ["candidateHook", "targetValueProp"],
       },
-      body: {
-        type: Type.STRING,
-        description:
-          "The complete personalized message body ready to send or copy, including greeting and sign-off.",
+      initialMessage: {
+        type: Type.OBJECT,
+        properties: {
+          subject: {
+            type: Type.STRING,
+            description: "Compelling, high-open-rate subject line or message headline.",
+          },
+          body: {
+            type: Type.STRING,
+            description: "The complete personalized message body ready to send or copy.",
+          },
+          callToAction: {
+            type: Type.STRING,
+            description: "The closing low-friction call to action sentence.",
+          },
+        },
+        required: ["subject", "body", "callToAction"],
       },
-      keyHighlights: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-        description:
-          "2-3 specific background points or skills referenced to personalize the message.",
-      },
-      callToAction: {
-        type: Type.STRING,
-        description: "The closing call to action sentence.",
+      followUpNudge: {
+        type: Type.OBJECT,
+        properties: {
+          subject: {
+            type: Type.STRING,
+            description: "Subject line for the follow-up, usually starting with 'Re: '",
+          },
+          body: {
+            type: Type.STRING,
+            description: "A 30-50 word follow up message to send on Day 4.",
+          },
+        },
+        required: ["subject", "body"],
       },
     },
-    required: ["subject", "body", "callToAction"],
+    required: ["sourcingIntelligence", "initialMessage", "followUpNudge"],
   };
 
   let response;
@@ -154,10 +196,7 @@ GOLDEN RULES FOR THE OUTREACH:
       },
     });
   } catch (error) {
-    console.warn(
-      "Fallback to gemini-3.5-flash-lite for outreach message generation:",
-      error
-    );
+    console.warn("Fallback to gemini-3.5-flash-lite for outreach message generation:", error);
     response = await ai.models.generateContent({
       model: "gemini-3.5-flash-lite",
       contents: [prompt],
@@ -173,10 +212,9 @@ GOLDEN RULES FOR THE OUTREACH:
   const parsed = JSON.parse(rawText || "{}");
 
   return {
-    subject: parsed.subject || `Opportunity: ${jobTitle} role at ${companyName}`,
-    body: parsed.body || "",
-    keyHighlights: parsed.keyHighlights || [],
-    callToAction: parsed.callToAction || "Open to connecting for a quick chat?",
+    sourcingIntelligence: parsed.sourcingIntelligence || { candidateHook: "", targetValueProp: "" },
+    initialMessage: parsed.initialMessage || { subject: "", body: "", callToAction: "" },
+    followUpNudge: parsed.followUpNudge || { subject: "", body: "" },
     channel,
     tone,
   };

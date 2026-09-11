@@ -100,13 +100,14 @@ export interface LogOutreachActionInput {
   subject: string;
   body: string;
   recruiterName?: string;
+  isFollowUp?: boolean;
 }
 
 export async function logCandidateOutreachActivity(
   input: LogOutreachActionInput
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { candidateId, channel, subject, body, recruiterName } = input;
+    const { candidateId, channel, subject, body, recruiterName, isFollowUp } = input;
 
     const supabase = await createClient();
 
@@ -117,10 +118,11 @@ export async function logCandidateOutreachActivity(
     };
 
     const preview = body.length > 200 ? body.slice(0, 200) + "..." : body;
+    const actionType = isFollowUp ? "Follow-up Sent" : "Outreach Sent";
 
     await supabase.from("activity_logs").insert({
       candidate_id: candidateId,
-      activity_type: `Outreach Sent (${channelLabels[channel] || channel})`,
+      activity_type: `${actionType} (${channelLabels[channel] || channel})`,
       notes: `Subject: ${subject}\n\n${preview}`,
       author_name: recruiterName || "Recruiter",
     });

@@ -57,8 +57,18 @@ export function AiOutreachModal({
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [outreachResult, setOutreachResult] = useState<OutreachResult | null>(null);
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"initial" | "followup">("initial");
+
+  // Editable fields for Initial Message
   const [editableSubject, setEditableSubject] = useState<string>("");
   const [editableBody, setEditableBody] = useState<string>("");
+
+  // Editable fields for Follow-Up
+  const [editableFollowUpSubject, setEditableFollowUpSubject] = useState<string>("");
+  const [editableFollowUpBody, setEditableFollowUpBody] = useState<string>("");
+
   const [error, setError] = useState<string>("");
 
   const [copiedSubject, setCopiedSubject] = useState<boolean>(false);
@@ -88,8 +98,23 @@ export function AiOutreachModal({
 
       if (res.success && res.outreach) {
         setOutreachResult(res.outreach);
-        setEditableSubject(res.outreach.subject);
-        setEditableBody(res.outreach.body);
+        
+        // Handle new structured schema
+        if (res.outreach.initialMessage) {
+          setEditableSubject(res.outreach.initialMessage.subject || "");
+          setEditableBody(res.outreach.initialMessage.body || "");
+        } else {
+          // Fallback for older schema if somehow returned
+          setEditableSubject((res.outreach as any).subject || "");
+          setEditableBody((res.outreach as any).body || "");
+        }
+
+        if (res.outreach.followUpNudge) {
+          setEditableFollowUpSubject(res.outreach.followUpNudge.subject || "");
+          setEditableFollowUpBody(res.outreach.followUpNudge.body || "");
+        }
+        
+        setActiveTab("initial");
       } else {
         setError(res.error || "Failed to generate outreach message.");
       }
@@ -100,34 +125,49 @@ export function AiOutreachModal({
     }
   }
 
+  const currentSubject = activeTab === "initial" ? editableSubject : editableFollowUpSubject;
+  const currentBody = activeTab === "initial" ? editableBody : editableFollowUpBody;
+
+  function setCurrentSubject(val: string) {
+    if (activeTab === "initial") setEditableSubject(val);
+    else setEditableFollowUpSubject(val);
+  }
+
+  function setCurrentBody(val: string) {
+    if (activeTab === "initial") setEditableBody(val);
+    else setEditableFollowUpBody(val);
+  }
+
   function handleCopySubject() {
-    if (!editableSubject) return;
-    navigator.clipboard.writeText(editableSubject);
+    if (!currentSubject) return;
+    navigator.clipboard.writeText(currentSubject);
     setCopiedSubject(true);
     setTimeout(() => setCopiedSubject(false), 2000);
   }
 
   function handleCopyBody() {
-    if (!editableBody) return;
-    navigator.clipboard.writeText(editableBody);
+    if (!currentBody) return;
+    navigator.clipboard.writeText(currentBody);
     setCopiedBody(true);
     setTimeout(() => setCopiedBody(false), 2000);
   }
 
   async function handleLogActivity() {
-    if (!candidate || !editableBody) return;
+    if (!candidate || !currentBody) return;
     setIsLogging(true);
     try {
       const res = await logCandidateOutreachActivity({
         candidateId: candidate.id,
         channel,
-        subject: editableSubject,
-        body: editableBody,
+        subject: currentSubject,
+        body: currentBody,
         recruiterName: activeRecruiter?.name || "Recruiter",
+        isFollowUp: activeTab === "followup"
       });
 
       if (res.success) {
         setLoggedSuccess(true);
+        setTimeout(() => setLoggedSuccess(false), 3000);
         onActivityLogged?.();
       } else {
         alert(res.error || "Failed to log outreach activity.");
@@ -142,8 +182,8 @@ export function AiOutreachModal({
   // Generate mailto link
   const mailtoUrl = candidate.email
     ? `mailto:${encodeURIComponent(candidate.email)}?subject=${encodeURIComponent(
-        editableSubject
-      )}&body=${encodeURIComponent(editableBody)}`
+        currentSubject
+      )}&body=${encodeURIComponent(currentBody)}`
     : null;
 
   const linkedInUrl = candidate.linkedin_url
@@ -334,25 +374,46 @@ export function AiOutreachModal({
           {/* Generated Result View */}
           {outreachResult && !isGenerating && (
             <div className="space-y-4 pt-1">
-              {/* Highlights badge if present */}
-              {outreachResult.keyHighlights && outreachResult.keyHighlights.length > 0 && (
-                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                  <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              
+              {/* Sourcing Intelligence Badge */}
+              {outreachResult.sourcingIntelligence && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 mb-2">
+                  <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <Sparkles className="h-3 w-3 text-secondary" />
-                    Personalized Hook Highlights
+                    Sourcing Intelligence
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {outreachResult.keyHighlights.map((hl, i) => (
-                      <span
-                        key={i}
-                        className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-700 shadow-xs"
-                      >
-                        {hl}
-                      </span>
-                    ))}
-                  </div>
+                  <ul className="text-xs text-slate-700 space-y-1.5 ml-1">
+                    <li><span className="font-semibold text-slate-900">Candidate Hook:</span> {outreachResult.sourcingIntelligence.candidateHook}</li>
+                    <li><span className="font-semibold text-slate-900">Target Value Prop:</span> {outreachResult.sourcingIntelligence.targetValueProp}</li>
+                  </ul>
                 </div>
               )}
+
+              {/* Tabs */}
+              <div className="flex items-center gap-2 border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("initial")}
+                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+                    activeTab === "initial"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Touch 1: Initial Message
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("followup")}
+                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+                    activeTab === "followup"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Touch 2: Day 4 Follow-Up Nudge
+                </button>
+              </div>
 
               {/* Subject / Title */}
               <div>
@@ -380,8 +441,8 @@ export function AiOutreachModal({
                 </div>
                 <input
                   type="text"
-                  value={editableSubject}
-                  onChange={(e) => setEditableSubject(e.target.value)}
+                  value={currentSubject}
+                  onChange={(e) => setCurrentSubject(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                 />
               </div>
@@ -409,9 +470,9 @@ export function AiOutreachModal({
                   </button>
                 </div>
                 <textarea
-                  rows={8}
-                  value={editableBody}
-                  onChange={(e) => setEditableBody(e.target.value)}
+                  rows={activeTab === "initial" ? 8 : 4}
+                  value={currentBody}
+                  onChange={(e) => setCurrentBody(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 p-3 text-xs leading-relaxed text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none"
                 />
               </div>
@@ -425,7 +486,7 @@ export function AiOutreachModal({
                       className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
                     >
                       <Mail className="h-3.5 w-3.5" />
-                      <span>Open Email Draft</span>
+                      <span>{activeTab === "initial" ? "Open Email Draft" : "Open Follow-Up Draft"}</span>
                     </a>
                   )}
 
@@ -489,7 +550,7 @@ export function AiOutreachModal({
                     ) : (
                       <Send className="h-3.5 w-3.5" />
                     )}
-                    <span>{loggedSuccess ? "Logged to Timeline" : "Log Outreach"}</span>
+                    <span>{loggedSuccess ? "Logged to Timeline" : (activeTab === "initial" ? "Log Initial Outreach" : "Log Follow-Up")}</span>
                   </button>
                 </div>
               </div>
