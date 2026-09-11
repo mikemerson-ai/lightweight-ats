@@ -60,6 +60,9 @@ export async function parseResumeAction(formData: FormData): Promise<ParseResume
     }
 
     const parsedData = await parseResumeData(payload, jobContext);
+    if (typeof payload === 'string' && !parsedData.rawResumeText) {
+      parsedData.rawResumeText = payload;
+    }
 
     return {
       success: true,

@@ -8,6 +8,12 @@ export interface JobContext {
   requirements: string;
 }
 
+export interface SubScores {
+  functionalExperience: number;
+  requiredCredentials: number;
+  roleSpecificSkills: number;
+}
+
 export interface ParsedCandidate {
   firstName: string;
   lastName: string;
@@ -18,6 +24,8 @@ export interface ParsedCandidate {
   yearsOfExperience: number;
   fitSummary: string;
   fitRating: number;
+  subScores?: SubScores;
+  rawResumeText?: string;
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
 }
 
@@ -47,6 +55,20 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         type: Type.NUMBER,
         description: "1-5 stars."
       },
+      subScores: {
+        type: Type.OBJECT,
+        description: "Three-pillar dimensional breakdown (1 to 5 scale each).",
+        properties: {
+          functionalExperience: { type: Type.INTEGER, description: "1-5 score for core operational duties and role experience." },
+          requiredCredentials: { type: Type.INTEGER, description: "1-5 score for mandatory education, degrees, licenses, or compliance clearances." },
+          roleSpecificSkills: { type: Type.INTEGER, description: "1-5 score for specific tools, technologies, and domain competencies." }
+        },
+        required: ["functionalExperience", "requiredCredentials", "roleSpecificSkills"]
+      },
+      rawResumeText: {
+        type: Type.STRING,
+        description: "Comprehensive extraction and transcription of the candidate's complete resume text content including career history, education, and credentials."
+      },
       work_experience: {
         type: Type.ARRAY,
         description: "Extract up to 3 of the most relevant past work experiences. Prioritize roles relevant to the Target Job Description; if none are relevant, use the 3 most recent. Summarize the duties into a concise 1-2 sentence overview.",
@@ -70,7 +92,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
   let instructions = "You are an objective talent acquisition specialist evaluating a candidate against a target Job Title and Job Description.";
 
   if (jobContext) {
-    instructions += `\n\nTarget Job Title: ${jobContext.title}\nTarget Job Description: ${jobContext.description}\nTarget Job Requirements: ${jobContext.requirements}\n\nUNIVERSAL SCORING RUBRIC (1 to 5 Stars):\n- 5 Stars (Exceptional Fit): Meets or exceeds core requirements, demonstrates substantial direct experience in the target role functions, and holds all mandatory certifications or licenses.\n- 4 Stars (Strong Fit): Significant direct experience in the core functional duties with strong domain relevance; meets primary qualifications with only minor preference gaps.\n- 3 Stars (Moderate / High-Potential Fit): Strong transferable domain knowledge and functional track record, but requires obtaining or renewing specific secondary certifications, tools, or niche credentials. Do NOT hard-cap strong transferable candidates at 2 stars if they possess proven core competencies.\n- 2 Stars (Weak Fit): Related industry or adjacent domain background, but lacks direct experience in the primary functional responsibilities outlined in the job description.\n- 1 Star (Mismatch): Unrelated background or fails to meet baseline minimum qualifications.\n\nEVALUATION RULES:\n1. Dynamic Grounding: Base evaluations strictly on the provided Target Job Title and Target Job Description.\n2. Balanced Weighting: Distinguish between trainable/acquirable certifications vs. core functional experience. Award 3/5 to candidates who have strong practical experience in adjacent or foundational duties even if minor credentials must be acquired on the job.\n3. fitSummary Structure (Strictly 2 Sentences):\n   - Sentence 1: Summarize total years of relevant experience, noting core strengths and any missing requirements or credentials.\n   - Sentence 2: Provide an objective rationale explaining the rating and the exact gaps needed to reach full alignment.`;
+    instructions += `\n\nTarget Job Title: ${jobContext.title}\nTarget Job Description: ${jobContext.description}\nTarget Job Requirements: ${jobContext.requirements}\n\nUNIVERSAL SCORING RUBRIC (1 to 5 Stars):\n- 5 Stars (Exceptional Fit): Meets or exceeds core requirements, demonstrates substantial direct experience in the target role functions, and holds all mandatory certifications or licenses.\n- 4 Stars (Strong Fit): Significant direct experience in the core functional duties with strong domain relevance; meets primary qualifications with only minor preference gaps.\n- 3 Stars (Moderate / High-Potential Fit): Strong transferable domain knowledge and functional track record, but requires obtaining or renewing specific secondary certifications, tools, or niche credentials. Do NOT hard-cap strong transferable candidates at 2 stars if they possess proven core competencies.\n- 2 Stars (Weak Fit): Related industry or adjacent domain background, but lacks direct experience in the primary functional responsibilities outlined in the job description.\n- 1 Star (Mismatch): Unrelated background or fails to meet baseline minimum qualifications.\n\nSUB-SCORE PILLARS (1 to 5 Stars each):\n- functionalExperience: Depth and duration of past direct responsibilities matching the role duties.\n- requiredCredentials: Check against required education, state licenses, or certifications (5 if met/exceeded, 3 if minor/trainable certs missing, 1-2 if mandatory core licenses missing).\n- roleSpecificSkills: Alignment of technical proficiencies, specialized software, and key skills.\n\nEVALUATION RULES:\n1. Dynamic Grounding: Base evaluations strictly on the provided Target Job Title and Target Job Description.\n2. Balanced Weighting: Distinguish between trainable/acquirable certifications vs. core functional experience. Award 3/5 to candidates who have strong practical experience in adjacent or foundational duties even if minor credentials must be acquired on the job.\n3. fitSummary Structure (Strictly 2 Sentences):\n   - Sentence 1: Summarize total years of relevant experience, noting core strengths and any missing requirements or credentials.\n   - Sentence 2: Provide an objective rationale explaining the rating and the exact gaps needed to reach full alignment.`;
   } else {
     instructions += "\n\nParse the attached resume document and extract the candidate information according to the schema.";
   }
@@ -111,6 +133,9 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
 
   try {
     const parsed = JSON.parse(response.text) as ParsedCandidate;
+    if (typeof payload === 'string' && !parsed.rawResumeText) {
+      parsed.rawResumeText = payload;
+    }
     return parsed;
   } catch (err) {
     throw new Error("Failed to parse resume: Invalid JSON response");

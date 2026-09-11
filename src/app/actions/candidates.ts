@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { CandidateDocument } from "@/types/documents";
-import type { ParsedCandidate } from "@/lib/gemini/parser";
+import { parseResumeData, type ParsedCandidate } from "@/lib/gemini/parser";
 
 import { SourcingChannel } from "@/lib/constants";
 
@@ -47,6 +47,8 @@ export interface QuickAddSourcedCandidateInput {
   date_sourced?: string;
   author_name?: string;
   address?: string;
+  resume_text?: string | null;
+  sub_scores?: { functionalExperience?: number; requiredCredentials?: number; roleSpecificSkills?: number } | null;
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
 }
 
@@ -68,6 +70,8 @@ export interface Candidate {
   years_of_experience?: number | null;
   ai_summary?: string | null;
   fit_rating?: number | null;
+  resume_text?: string | null;
+  sub_scores?: { functionalExperience?: number; requiredCredentials?: number; roleSpecificSkills?: number } | null;
   created_at: string;
   updated_at: string;
   date_applied?: string;
@@ -223,31 +227,53 @@ export async function quickAddSourcedCandidate(
 ): Promise<{ success: boolean; candidate?: Candidate; error?: string }> {
   const supabase = await createClient();
 
-  const { data: candidate, error } = await supabase
+  const insertPayload: any = {
+    first_name: data.first_name,
+    last_name: data.last_name,
+    pipeline_stage: "new_application",
+    source_channel: data.source_channel,
+    source_type: data.source_type || "outbound",
+    job_id: data.job_id,
+    contact_info: data.contact_info,
+    linkedin_url: data.linkedin_url,
+    email: (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim(),
+    phone: (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim(),
+    primary_skills: data.primary_skills,
+    years_of_experience: data.years_of_experience,
+    ai_summary: data.ai_summary,
+    fit_rating: data.fit_rating,
+    pending_resume: data.pending_resume ?? true,
+    date_applied: data.date_applied,
+    date_sourced: data.date_sourced,
+    address: data.address,
+    work_experience: data.work_experience ?? [],
+  };
+
+  if (data.resume_text) {
+    insertPayload.resume_text = data.resume_text;
+  }
+  if (data.sub_scores) {
+    insertPayload.sub_scores = data.sub_scores;
+  }
+
+  let { data: candidate, error } = await supabase
     .from("candidates")
-    .insert({
-      first_name: data.first_name,
-      last_name: data.last_name,
-      pipeline_stage: "new_application",
-      source_channel: data.source_channel,
-      source_type: data.source_type || "outbound",
-      job_id: data.job_id,
-      contact_info: data.contact_info,
-      linkedin_url: data.linkedin_url,
-      email: (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim(),
-      phone: (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim(),
-      primary_skills: data.primary_skills,
-      years_of_experience: data.years_of_experience,
-      ai_summary: data.ai_summary,
-      fit_rating: data.fit_rating,
-      pending_resume: data.pending_resume ?? true,
-      date_applied: data.date_applied,
-      date_sourced: data.date_sourced,
-      address: data.address,
-      work_experience: data.work_experience ?? [],
-    })
+    .insert(insertPayload)
     .select("*, jobs(title)")
     .single();
+
+  // If column doesn't exist yet in the database schema, gracefully retry without new columns
+  if (error && (error.message?.includes("resume_text") || error.message?.includes("sub_scores"))) {
+    delete insertPayload.resume_text;
+    delete insertPayload.sub_scores;
+    const retry = await supabase
+      .from("candidates")
+      .insert(insertPayload)
+      .select("*, jobs(title)")
+      .single();
+    candidate = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     if (error.code === "23505") {
@@ -606,13 +632,28 @@ export async function updateDuplicateCandidateResume(
   if (typeof parsedData.fitRating === "number") updateData.fit_rating = parsedData.fitRating;
   if (typeof parsedData.yearsOfExperience === "number") updateData.years_of_experience = parsedData.yearsOfExperience;
   if (parsedData.work_experience) updateData.work_experience = parsedData.work_experience;
+  if (parsedData.rawResumeText) updateData.resume_text = parsedData.rawResumeText;
+  if (parsedData.subScores) updateData.sub_scores = parsedData.subScores;
 
-  const { data: updatedCandidate, error: updateError } = await supabase
+  let { data: updatedCandidate, error: updateError } = await supabase
     .from("candidates")
     .update(updateData)
     .eq("id", candidateId)
     .select("*, jobs(title)")
     .single();
+
+  if (updateError && (updateError.message?.includes("resume_text") || updateError.message?.includes("sub_scores"))) {
+    delete updateData.resume_text;
+    delete updateData.sub_scores;
+    const retry = await supabase
+      .from("candidates")
+      .update(updateData)
+      .eq("id", candidateId)
+      .select("*, jobs(title)")
+      .single();
+    updatedCandidate = retry.data;
+    updateError = retry.error;
+  }
 
   if (updateError) {
     return { success: false, error: updateError.message };
@@ -634,4 +675,222 @@ export async function updateDuplicateCandidateResume(
   revalidatePath("/");
 
   return { success: true, candidate: updatedCandidate as Candidate };
+}
+
+export async function reEvaluateCandidateFit(
+  candidateId: string,
+  updatedBy?: string
+): Promise<{ success: boolean; candidate?: Candidate; error?: string }> {
+  try {
+    const supabase = await createClient();
+
+    // 1. Fetch candidate with job details
+    const { data: candidate, error: fetchError } = await supabase
+      .from("candidates")
+      .select("*, jobs(id, title, description, requirements)")
+      .eq("id", candidateId)
+      .single();
+
+    if (fetchError || !candidate) {
+      return { success: false, error: fetchError?.message || "Candidate not found" };
+    }
+
+    const job = candidate.jobs as { id: string; title: string; description: string; requirements?: string } | null;
+    if (!job || !job.description || job.description.trim().length === 0) {
+      return {
+        success: false,
+        error: "Target job description is missing. A valid job description is required for re-evaluation.",
+      };
+    }
+
+    // 2. Determine payload: prefer resume_text, then fall back to synthesized profile text
+    let payload: string;
+    if (candidate.resume_text && candidate.resume_text.trim().length > 30) {
+      payload = candidate.resume_text;
+    } else {
+      let profileText = `Candidate Name: ${candidate.first_name} ${candidate.last_name}\n`;
+      if (candidate.primary_skills) profileText += `Key Skills: ${candidate.primary_skills}\n`;
+      if (candidate.years_of_experience) profileText += `Years of Experience: ${candidate.years_of_experience}\n`;
+      if (candidate.ai_summary) profileText += `Previous Summary: ${candidate.ai_summary}\n`;
+      if (candidate.work_experience && Array.isArray(candidate.work_experience) && candidate.work_experience.length > 0) {
+        profileText += `\nWork Experience:\n`;
+        candidate.work_experience.forEach((exp: any) => {
+          profileText += `- ${exp.jobTitle || 'Role'} at ${exp.company || 'Company'} (${exp.dates || ''}): ${exp.summary || ''}\n`;
+        });
+      }
+      payload = profileText;
+    }
+
+    // 3. Re-run Gemini Pass 1
+    const parsedData = await parseResumeData(payload, {
+      title: job.title,
+      description: job.description,
+      requirements: job.requirements || "",
+    });
+
+    // 4. Update candidate record
+    const updatePayload: any = {
+      updated_at: new Date().toISOString(),
+      ai_summary: parsedData.fitSummary,
+      fit_rating: parsedData.fitRating,
+    };
+    if (parsedData.primarySkills?.length) {
+      updatePayload.primary_skills = parsedData.primarySkills.join(", ");
+    }
+    if (typeof parsedData.yearsOfExperience === "number") {
+      updatePayload.years_of_experience = parsedData.yearsOfExperience;
+    }
+    if (parsedData.work_experience?.length) {
+      updatePayload.work_experience = parsedData.work_experience;
+    }
+    if (parsedData.rawResumeText) {
+      updatePayload.resume_text = parsedData.rawResumeText;
+    }
+    if (parsedData.subScores) {
+      updatePayload.sub_scores = parsedData.subScores;
+    }
+
+    let { data: updatedCandidate, error: updateError } = await supabase
+      .from("candidates")
+      .update(updatePayload)
+      .eq("id", candidateId)
+      .select("*, jobs(title)")
+      .single();
+
+    if (updateError && (updateError.message?.includes("resume_text") || updateError.message?.includes("sub_scores"))) {
+      delete updatePayload.resume_text;
+      delete updatePayload.sub_scores;
+      const retry = await supabase
+        .from("candidates")
+        .update(updatePayload)
+        .eq("id", candidateId)
+        .select("*, jobs(title)")
+        .single();
+      updatedCandidate = retry.data;
+      updateError = retry.error;
+    }
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    // 5. Activity log
+    await supabase.from("activity_logs").insert({
+      candidate_id: candidateId,
+      activity_type: "AI Fit Re-evaluated",
+      notes: `Candidate fit re-evaluated against ${job.title}: ${parsedData.fitRating}/5 stars`,
+      author_name: updatedBy || "Recruiter",
+    });
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return { success: true, candidate: updatedCandidate as Candidate };
+  } catch (err: any) {
+    console.error("Error re-evaluating candidate:", err);
+    return { success: false, error: err.message || "An unexpected error occurred during re-evaluation." };
+  }
+}
+
+export interface BatchImportCandidateInput {
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  primary_skills?: string;
+  years_of_experience?: number | null;
+  ai_summary?: string | null;
+  fit_rating?: number | null;
+  sub_scores?: { functionalExperience?: number; requiredCredentials?: number; roleSpecificSkills?: number } | null;
+  resume_text?: string | null;
+  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
+  job_id: string;
+  source_channel?: string;
+  source_type?: string;
+  author_name?: string;
+}
+
+export async function bulkAddCandidates(
+  candidatesData: BatchImportCandidateInput[]
+): Promise<{ success: boolean; count: number; importedCandidates?: Candidate[]; errors?: string[] }> {
+  try {
+    const supabase = await createClient();
+    const imported: Candidate[] = [];
+    const errors: string[] = [];
+
+    for (const data of candidatesData) {
+      const emailVal = (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim();
+      const phoneVal = (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim();
+
+      const insertPayload: any = {
+        first_name: data.first_name || "Candidate",
+        last_name: data.last_name || "Unknown",
+        pipeline_stage: "new_application",
+        source_channel: data.source_channel || "Batch Upload",
+        source_type: data.source_type || "inbound",
+        job_id: data.job_id,
+        contact_info: emailVal || phoneVal || "Batch Imported",
+        email: emailVal,
+        phone: phoneVal,
+        address: data.address,
+        primary_skills: data.primary_skills,
+        years_of_experience: data.years_of_experience,
+        ai_summary: data.ai_summary,
+        fit_rating: data.fit_rating,
+        pending_resume: false,
+        date_applied: new Date().toISOString().split("T")[0],
+        work_experience: data.work_experience ?? [],
+      };
+
+      if (data.resume_text) insertPayload.resume_text = data.resume_text;
+      if (data.sub_scores) insertPayload.sub_scores = data.sub_scores;
+
+      let { data: candidate, error } = await supabase
+        .from("candidates")
+        .insert(insertPayload)
+        .select("*, jobs(title)")
+        .single();
+
+      if (error && (error.message?.includes("resume_text") || error.message?.includes("sub_scores"))) {
+        delete insertPayload.resume_text;
+        delete insertPayload.sub_scores;
+        const retry = await supabase
+          .from("candidates")
+          .insert(insertPayload)
+          .select("*, jobs(title)")
+          .single();
+        candidate = retry.data;
+        error = retry.error;
+      }
+
+      if (error) {
+        errors.push(`Failed to import ${data.first_name} ${data.last_name}: ${error.message}`);
+        continue;
+      }
+
+      if (candidate) {
+        imported.push(candidate as Candidate);
+        await supabase.from("activity_logs").insert({
+          candidate_id: candidate.id,
+          activity_type: "Batch Ingested",
+          notes: `Candidate imported via AI Batch Intake: ${data.fit_rating ?? 0}/5 fit rating`,
+          author_name: data.author_name || "Recruiter",
+        });
+      }
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return {
+      success: imported.length > 0,
+      count: imported.length,
+      importedCandidates: imported,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  } catch (err: any) {
+    console.error("Error during batch candidate creation:", err);
+    return { success: false, count: 0, errors: [err.message || "Unexpected batch error"] };
+  }
 }

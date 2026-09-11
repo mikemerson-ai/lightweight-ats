@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit } from "lucide-react";
+import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit, RefreshCw } from "lucide-react";
 import {
   type Candidate,
   getCandidateActivity,
@@ -9,6 +9,7 @@ import {
   setCandidateDNHStatus,
   addCandidateNote,
   updateCandidateProfile,
+  reEvaluateCandidateFit,
   type ActivityLogEntry,
 } from "@/app/actions/candidates";
 import {
@@ -249,13 +250,24 @@ interface CandidateDetailDrawerProps {
   candidate: Candidate | null;
   onClose: () => void;
   onStageChange?: (candidate: Candidate, stage: string) => void;
+  onCandidateUpdated?: (candidate: Candidate) => void;
 }
 
 export function CandidateDetailDrawer({
   candidate,
   onClose,
   onStageChange,
+  onCandidateUpdated,
 }: CandidateDetailDrawerProps) {
+  const [localCandidate, setLocalCandidate] = useState<Candidate | null>(candidate);
+  const [isReEvaluating, setIsReEvaluating] = useState(false);
+
+  useEffect(() => {
+    setLocalCandidate(candidate);
+  }, [candidate]);
+
+  const activeCandidate = localCandidate || candidate;
+
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
   const [documents, setDocuments] = useState<CandidateDocument[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -484,13 +496,34 @@ export function CandidateDetailDrawer({
     }
   }
 
+  async function handleReEvaluateFit() {
+    if (!activeCandidate?.id) return;
+    setIsReEvaluating(true);
+    try {
+      const res = await reEvaluateCandidateFit(activeCandidate.id, activeRecruiter?.name);
+      if (res.success && res.candidate) {
+        setLocalCandidate(res.candidate);
+        onCandidateUpdated?.(res.candidate);
+        const updatedActivity = await getCandidateActivity(activeCandidate.id);
+        setActivity(updatedActivity);
+      } else {
+        alert(res.error || "Failed to re-evaluate candidate fit.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "An unexpected error occurred during re-evaluation.");
+    } finally {
+      setIsReEvaluating(false);
+    }
+  }
+
   const skills =
-    candidate?.primary_skills
+    activeCandidate?.primary_skills
       ?.split(",")
       .map((s) => s.trim())
       .filter(Boolean) ?? [];
 
-  const originInfo = candidate ? getCandidateOriginDate(candidate) : { label: "Applied", date: "" };
+  const originInfo = activeCandidate ? getCandidateOriginDate(activeCandidate) : { label: "Applied", date: "" };
 
   return (
     <div
@@ -779,12 +812,24 @@ export function CandidateDetailDrawer({
             
             <section className="rounded-xl border bg-white p-5">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-primary flex items-center gap-1.5">
-                  <span>AI Fit Summary</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                    Pass 1 Fast Intake
-                  </span>
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                    <span>AI Fit Summary</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                      Pass 1 Fast Intake
+                    </span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleReEvaluateFit}
+                    disabled={isReEvaluating}
+                    title="Re-evaluate Fit against current job description"
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 text-slate-500 ${isReEvaluating ? "animate-spin text-secondary" : ""}`} />
+                    <span>{isReEvaluating ? "Evaluating..." : "Re-evaluate"}</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -798,32 +843,75 @@ export function CandidateDetailDrawer({
                 </button>
               </div>
               
-              {candidate.fit_rating != null && (
+              {activeCandidate?.fit_rating != null && (
                 <div className="mt-3 flex items-center gap-1">
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
                       className={`h-5 w-5 ${
-                        i < candidate.fit_rating!
+                        activeCandidate.fit_rating != null && i < activeCandidate.fit_rating
                           ? "fill-amber-500 text-amber-500"
                           : "text-slate-300"
                       }`}
                     />
                   ))}
                   <span className="ml-2 text-sm font-medium text-slate-700">
-                    {candidate.fit_rating}/5 Fit
+                    {activeCandidate.fit_rating}/5 Fit
                   </span>
                 </div>
               )}
 
+              {activeCandidate?.sub_scores && (
+                <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
+                  <div className="text-center">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Experience</div>
+                    <div className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {activeCandidate.sub_scores.functionalExperience ?? "-"}/5
+                    </div>
+                  </div>
+                  <div className="text-center border-x border-slate-200">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Credentials</div>
+                    <div className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {activeCandidate.sub_scores.requiredCredentials ?? "-"}/5
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Skills</div>
+                    <div className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {activeCandidate.sub_scores.roleSpecificSkills ?? "-"}/5
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {((activeCandidate?.fit_rating != null && activeCandidate.fit_rating <= 2) ||
+                evaluations.some((ev) => ev.recommendation?.toLowerCase().includes("reject") || ev.notes?.includes("DO NOT ADVANCE"))) &&
+                activeCandidate?.pipeline_stage !== "disqualified" && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50/90 p-3 text-xs text-rose-900 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                    <span>
+                      <strong>AI Screening Alert:</strong> Low alignment score with critical qualification gaps.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => activeCandidate && onStageChange?.(activeCandidate, "disqualified")}
+                    className="shrink-0 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700 transition shadow-xs cursor-pointer"
+                  >
+                    Disqualify Candidate
+                  </button>
+                </div>
+              )}
+
               <p className="mt-3 text-sm text-slate-700">
-                {candidate.ai_summary || "No AI summary available for this candidate yet."}
+                {activeCandidate?.ai_summary || "No AI summary available for this candidate yet."}
               </p>
-              {candidate.years_of_experience != null &&
-                candidate.years_of_experience > 0 && (
+              {activeCandidate?.years_of_experience != null &&
+                activeCandidate.years_of_experience > 0 && (
                   <p className="mt-2 text-sm text-slate-500">
                     <span className="font-medium text-primary">Experience:</span>{" "}
-                    {candidate.years_of_experience} yrs
+                    {activeCandidate.years_of_experience} yrs
                   </p>
                 )}
               {skills.length > 0 && (

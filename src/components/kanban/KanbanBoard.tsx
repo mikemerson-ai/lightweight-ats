@@ -399,6 +399,10 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
         candidate={selectedCandidate}
         onClose={() => setSelectedCandidate(null)}
         onStageChange={(candidate, stage) => handleStageChange(candidate, stage)}
+        onCandidateUpdated={(updated) => {
+          setSelectedCandidate(updated);
+          setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        }}
       />
     </>
   );

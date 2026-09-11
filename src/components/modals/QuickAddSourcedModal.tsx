@@ -6,7 +6,7 @@ import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandi
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import { parseResumeAction } from "@/app/actions/resumeParser";
-import type { ParsedCandidate } from "@/lib/gemini/parser";
+import type { ParsedCandidate, SubScores } from "@/lib/gemini/parser";
 import { getJobs, type Job } from "@/app/actions/jobs";
 import { useRecruiter } from "@/context/RecruiterContext";
 
@@ -34,10 +34,12 @@ export function QuickAddSourcedModal({
   const [yearsOfExperience, setYearsOfExperience] = useState("");
   const [aiSummary, setAiSummary] = useState("");
   const [fitRating, setFitRating] = useState<number | null>(null);
+  const [subScores, setSubScores] = useState<SubScores | null>(null);
   const [outreachNotes, setOutreachNotes] = useState("");
   const [workExperience, setWorkExperience] = useState<Array<{ jobTitle: string; company: string; dates: string; summary: string }>>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [resume, setResume] = useState<File | null>(null);
+  const [resumeText, setResumeText] = useState("");
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,9 +106,11 @@ export function QuickAddSourcedModal({
     setYearsOfExperience("");
     setAiSummary("");
     setFitRating(null);
+    setSubScores(null);
     setOutreachNotes("");
     setWorkExperience([]);
     setResume(null);
+    setResumeText("");
     setDragging(false);
     setParsing(false);
     setError("");
@@ -132,6 +136,12 @@ export function QuickAddSourcedModal({
     }
     if (data.work_experience && Array.isArray(data.work_experience)) {
       setWorkExperience(data.work_experience);
+    }
+    if (data.rawResumeText) {
+      setResumeText(data.rawResumeText);
+    }
+    if (data.subScores) {
+      setSubScores(data.subScores);
     }
     const notes = [summary, typeof data.fitRating === "number" ? `Fit Rating: ${data.fitRating}/5` : ""]
       .filter(Boolean)
@@ -187,7 +197,9 @@ export function QuickAddSourcedModal({
         fitSummary: aiSummary,
         fitRating: fitRating ?? 0,
         yearsOfExperience: Number(yearsOfExperience) || 0,
-        work_experience: workExperience
+        work_experience: workExperience,
+        rawResumeText: resumeText || undefined,
+        subScores: subScores || undefined,
       };
       
       const res = await updateDuplicateCandidateResume(
@@ -244,6 +256,8 @@ export function QuickAddSourcedModal({
         fit_rating: fitRating,
         outreach_notes: outreachNotes,
         work_experience: workExperience,
+        resume_text: resumeText || null,
+        sub_scores: subScores || null,
         author_name: activeRecruiter?.name || "Recruiter",
       });
 

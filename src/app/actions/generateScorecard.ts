@@ -58,6 +58,8 @@ export async function generateCandidateScorecard(formData: FormData): Promise<Ge
       }
     } else if (directText && directText.trim().length > 0) {
       payload = directText;
+    } else if (candidate.resume_text && candidate.resume_text.trim().length > 30) {
+      payload = candidate.resume_text;
     } else {
       // Fallback: Construct candidate profile text from existing DB fields
       let profileText = `Candidate Name: ${candidate.first_name} ${candidate.last_name}\n`;

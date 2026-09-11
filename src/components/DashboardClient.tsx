@@ -5,12 +5,13 @@ import { Job, getJobs, deleteJob } from "@/app/actions/jobs";
 import type { Candidate } from "@/app/actions/candidates";
 import { SearchBar } from "./search/SearchBar";
 import { QuickAddSourcedModal } from "./modals/QuickAddSourcedModal";
+import { BatchResumeUploadModal } from "./modals/BatchResumeUploadModal";
 import { CreateJobModal } from "./modals/CreateJobModal";
 import { EditJobModal } from "./modals/EditJobModal";
 import { KanbanBoard, type KanbanBoardRef } from "./kanban/KanbanBoard";
 import { AnalyticsModal } from "./analytics/AnalyticsModal";
 import { ScorecardBuilderModal } from "./modals/ScorecardBuilderModal";
-import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList, LayoutGrid, List } from "lucide-react";
+import { Pencil, Trash2, AlertCircle, BarChart3, ClipboardList, LayoutGrid, List, Files } from "lucide-react";
 import RecruiterSwitcher from "./layout/RecruiterSwitcher";
 
 export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
@@ -22,6 +23,7 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
   const [sourceFilter, setSourceFilter] = useState<"all" | "inbound" | "outbound">("all");
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [batchUploadOpen, setBatchUploadOpen] = useState(false);
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
   const [scorecardBuilderOpen, setScorecardBuilderOpen] = useState(false);
@@ -202,6 +204,15 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
           </select>
           <button
             type="button"
+            onClick={() => setBatchUploadOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
+            title="Batch Resume Ingestion"
+          >
+            <Files className="h-4 w-4 text-secondary" />
+            <span>Batch Import</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setQuickAddOpen(true)}
             className="rounded-md bg-[#0F2C59] px-4 py-2 text-sm font-medium text-[#F8FAFC] hover:bg-[#0EA5E9]"
           >
@@ -231,6 +242,18 @@ export function DashboardClient({ initialJobs }: { initialJobs: Job[] }) {
         onClose={() => setQuickAddOpen(false)}
         onCandidateAdded={(newCandidate) => {
           kanbanRef.current?.addCandidate(newCandidate);
+        }}
+      />
+
+      <BatchResumeUploadModal
+        open={batchUploadOpen}
+        onClose={() => setBatchUploadOpen(false)}
+        jobs={jobs}
+        defaultJobId={selectedJobId}
+        onCandidatesAdded={() => {
+          const currentId = selectedJobId;
+          setSelectedJobId(null);
+          setTimeout(() => setSelectedJobId(currentId), 20);
         }}
       />
 
