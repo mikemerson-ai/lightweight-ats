@@ -11,6 +11,7 @@ import {
   updateCandidateProfile,
   reEvaluateCandidateFit,
   uploadCandidateResume,
+  getCandidateById,
   type ActivityLogEntry,
 } from "@/app/actions/candidates";
 import {
@@ -35,6 +36,7 @@ import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import type { Evaluation } from "@/types/evaluations";
 import { EvaluationModal } from "@/components/modals/EvaluationModal";
 import { ScorecardViewerModal } from "@/components/modals/ScorecardViewerModal";
+import { AiOutreachModal } from "@/components/modals/AiOutreachModal";
 import { Trash2, Sparkles } from "lucide-react";
 
 const STAGE_TITLES: Record<string, string> = {
@@ -279,6 +281,7 @@ export function CandidateDetailDrawer({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
   const [showScorecardModal, setShowScorecardModal] = useState(false);
+  const [showOutreachModal, setShowOutreachModal] = useState(false);
   const [newDocName, setNewDocName] = useState(STANDARD_COMPLIANCE_DOCUMENTS[0].name);
   const [newDocCategory, setNewDocCategory] = useState(STANDARD_COMPLIANCE_DOCUMENTS[0].category);
   const [newDocRequiresExpiration, setNewDocRequiresExpiration] = useState(STANDARD_COMPLIANCE_DOCUMENTS[0].requiresExpiration);
@@ -718,6 +721,15 @@ export function CandidateDetailDrawer({
                   LinkedIn
                 </a>
               )}
+              <button
+                type="button"
+                onClick={() => setShowOutreachModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 px-2.5 py-0.5 text-xs font-semibold text-white border border-white/25 transition shadow-xs cursor-pointer ml-auto"
+                title="Generate AI Outreach (Email, LinkedIn, Indeed)"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                <span>AI Outreach</span>
+              </button>
             </div>
           </div>
           
@@ -1386,18 +1398,32 @@ export function CandidateDetailDrawer({
             (ev) => ev.reviewer_name?.includes("AI") || ev.notes?.includes("Hard Gate")
           )?.notes || null
         }
-        onScorecardGenerated={async () => {
+        onScorecardGenerated={async (_markdown, updatedCandidate) => {
           if (!candidate) return;
-          const [evs, acts] = await Promise.all([
+          const [evs, acts, freshCandidate] = await Promise.all([
             getEvaluationsByCandidate(candidate.id),
             getCandidateActivity(candidate.id),
+            getCandidateById(candidate.id),
           ]);
           setEvaluations(evs);
           setActivity(acts);
-          onCandidateUpdated?.({
-            ...candidate,
+          const baseCandidate = freshCandidate || updatedCandidate || candidate;
+          const updated = {
+            ...baseCandidate,
             evaluations: evs,
-          });
+          };
+          setLocalCandidate(updated);
+          onCandidateUpdated?.(updated);
+        }}
+      />
+      <AiOutreachModal
+        open={showOutreachModal}
+        onClose={() => setShowOutreachModal(false)}
+        candidate={activeCandidate}
+        onActivityLogged={async () => {
+          if (!activeCandidate) return;
+          const acts = await getCandidateActivity(activeCandidate.id);
+          setActivity(acts);
         }}
       />
     </div>

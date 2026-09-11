@@ -2,15 +2,16 @@
 
 import { useState, useRef } from "react";
 import { X, Copy, Check, Sparkles, Upload, Loader2, AlertCircle, ShieldAlert, CheckCircle2, FileText } from "lucide-react";
-import { type Candidate } from "@/app/actions/candidates";
+import { type Candidate, uploadCandidateResume } from "@/app/actions/candidates";
 import { generateCandidateScorecard } from "@/app/actions/generateScorecard";
+import { useRecruiter } from "@/context/RecruiterContext";
 
 interface ScorecardViewerModalProps {
   open: boolean;
   onClose: () => void;
   candidate: Candidate | null;
   existingMarkdown?: string | null;
-  onScorecardGenerated?: (markdown: string) => void;
+  onScorecardGenerated?: (markdown: string, updatedCandidate?: Candidate) => void;
 }
 
 export function ScorecardViewerModal({
@@ -30,6 +31,8 @@ export function ScorecardViewerModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [prevCandidateId, setPrevCandidateId] = useState<string | undefined>(candidate?.id);
+
+  const { activeRecruiter } = useRecruiter();
 
   // Sync markdown if candidate changes or existingMarkdown changes
   if (candidate?.id !== prevCandidateId) {
@@ -60,6 +63,21 @@ export function ScorecardViewerModal({
     setError("");
 
     try {
+      let updatedCandidate: Candidate | undefined;
+
+      // If a new resume file is provided, persist it to candidate's profile in Supabase
+      if (fileToUse) {
+        const uploadFormData = new FormData();
+        uploadFormData.set("file", fileToUse);
+        uploadFormData.set("authorName", activeRecruiter?.name || "Recruiter");
+        const uploadRes = await uploadCandidateResume(candidate.id, uploadFormData);
+        if (uploadRes.success && uploadRes.candidate) {
+          updatedCandidate = uploadRes.candidate;
+        } else if (uploadRes.error) {
+          console.warn("Could not persist uploaded resume file:", uploadRes.error);
+        }
+      }
+
       const formData = new FormData();
       formData.append("candidateId", candidate.id);
       if (fileToUse) {
@@ -72,7 +90,7 @@ export function ScorecardViewerModal({
         setShowUpload(false);
         setSelectedFile(null);
         if (onScorecardGenerated) {
-          onScorecardGenerated(result.scorecard.markdown);
+          onScorecardGenerated(result.scorecard.markdown, updatedCandidate);
         }
       } else {
         setError(result.error || "Failed to generate evaluation scorecard.");

@@ -6,6 +6,7 @@ import { Star, Sparkles, FileText } from "lucide-react";
 import {
   getCandidatesByJob,
   updateCandidateStage,
+  getCandidateById,
   type Candidate,
 } from "@/app/actions/candidates";
 import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
@@ -611,10 +612,14 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
         onClose={() => setScorecardCandidate(null)}
         candidate={scorecardCandidate}
         existingMarkdown={scorecardCandidate ? getCandidateAiScorecard(scorecardCandidate)?.rawNotes || null : null}
-        onScorecardGenerated={async () => {
+        onScorecardGenerated={async (_markdown, updatedCandidate) => {
           if (!scorecardCandidate) return;
-          const evs = await getEvaluationsByCandidate(scorecardCandidate.id);
-          const updated = { ...scorecardCandidate, evaluations: evs };
+          const [evs, freshCandidate] = await Promise.all([
+            getEvaluationsByCandidate(scorecardCandidate.id),
+            getCandidateById(scorecardCandidate.id),
+          ]);
+          const base = freshCandidate || updatedCandidate || scorecardCandidate;
+          const updated = { ...base, evaluations: evs };
           setScorecardCandidate(updated);
           setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
           if (selectedCandidate?.id === updated.id) {

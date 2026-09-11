@@ -22,6 +22,7 @@ import {
   type BatchImportCandidateInput,
   checkBatchCandidateDuplicates,
   type CandidateDuplicateResult,
+  uploadCandidateResume,
 } from "@/app/actions/candidates";
 import {
   APPLIED_CHANNELS,
@@ -71,6 +72,7 @@ export function BatchResumeUploadModal({
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importStatusText, setImportStatusText] = useState<string>("");
   const [dragging, setDragging] = useState(false);
   const [sortOrder, setSortOrder] = useState<"fitDesc" | "original">("fitDesc");
   const [importSummary, setImportSummary] = useState<{ successCount: number; errors?: string[] } | null>(null);
@@ -357,6 +359,7 @@ export function BatchResumeUploadModal({
     const candidatesToImport: BatchImportCandidateInput[] = selectedItems.map((item) => {
       const data = item.parsedData!;
       return {
+        queue_id: item.id,
         first_name: data.firstName || "Candidate",
         last_name: data.lastName || "Imported",
         email: data.email,
@@ -379,8 +382,34 @@ export function BatchResumeUploadModal({
     });
 
     setIsImporting(true);
+    setImportStatusText("Creating candidate profiles...");
     try {
       const res = await bulkAddCandidates(candidatesToImport);
+
+      // Upload actual resume files to Supabase Storage for all successfully created candidates
+      if (res.importedCandidates && res.importedCandidates.length > 0) {
+        const totalToUpload = res.importedCandidates.length;
+        let uploadedCount = 0;
+
+        for (const imp of res.importedCandidates) {
+          if (imp.queue_id) {
+            const queueItem = selectedItems.find((item) => item.id === imp.queue_id);
+            if (queueItem && queueItem.file) {
+              uploadedCount++;
+              setImportStatusText(`Saving resumes (${uploadedCount}/${totalToUpload})...`);
+              const uploadFormData = new FormData();
+              uploadFormData.set("file", queueItem.file);
+              uploadFormData.set("authorName", activeRecruiter?.name || "Recruiter");
+              try {
+                await uploadCandidateResume(imp.id, uploadFormData);
+              } catch (upErr) {
+                console.warn(`Could not upload resume for candidate ${imp.id}:`, upErr);
+              }
+            }
+          }
+        }
+      }
+
       setImportSummary({ successCount: res.count, errors: res.errors });
       if (res.success) {
         onCandidatesAdded?.(targetJobId);
@@ -390,6 +419,7 @@ export function BatchResumeUploadModal({
       alert("Failed to import candidates: " + err.message);
     } finally {
       setIsImporting(false);
+      setImportStatusText("");
     }
   }
 
@@ -897,7 +927,7 @@ export function BatchResumeUploadModal({
                 {isImporting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Importing to Pipeline...</span>
+                    <span>{importStatusText || "Importing to Pipeline..."}</span>
                   </>
                 ) : isCheckingDuplicates ? (
                   <>

@@ -1146,7 +1146,25 @@ export async function reEvaluateCandidateFit(
   }
 }
 
+export async function getCandidateById(candidateId: string): Promise<Candidate | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("candidates")
+      .select("*, jobs(title)")
+      .eq("id", candidateId)
+      .single();
+
+    if (error || !data) return null;
+    return data as Candidate;
+  } catch (err) {
+    console.error("Error in getCandidateById:", err);
+    return null;
+  }
+}
+
 export interface BatchImportCandidateInput {
+  queue_id?: string;
   first_name: string;
   last_name: string;
   email?: string;
@@ -1169,10 +1187,10 @@ export interface BatchImportCandidateInput {
 
 export async function bulkAddCandidates(
   candidatesData: BatchImportCandidateInput[]
-): Promise<{ success: boolean; count: number; importedCandidates?: Candidate[]; errors?: string[] }> {
+): Promise<{ success: boolean; count: number; importedCandidates?: (Candidate & { queue_id?: string })[]; errors?: string[] }> {
   try {
     const supabase = await createClient();
-    const imported: Candidate[] = [];
+    const imported: (Candidate & { queue_id?: string })[] = [];
     const errors: string[] = [];
 
     for (const data of candidatesData) {
@@ -1229,7 +1247,7 @@ export async function bulkAddCandidates(
       }
 
       if (candidate) {
-        imported.push(candidate as Candidate);
+        imported.push({ ...(candidate as Candidate), queue_id: data.queue_id });
         await supabase.from("activity_logs").insert({
           candidate_id: candidate.id,
           activity_type: "Batch Ingested",
