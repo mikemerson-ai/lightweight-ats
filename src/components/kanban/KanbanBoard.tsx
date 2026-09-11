@@ -269,6 +269,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                     <th className="px-6 py-4">Name</th>
                     <th className="px-6 py-4">Stage</th>
                     <th className="px-6 py-4">AI Fit Score Summary</th>
+                    <th className="px-6 py-4 whitespace-nowrap">Three Pillars</th>
                     <th className="px-6 py-4">Email</th>
                     <th className="px-6 py-4">Date Applied</th>
                     <th className="px-6 py-4">Action</th>
@@ -336,6 +337,35 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                               <span className="text-xs text-slate-400 italic">No summary available</span>
                             )}
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {candidate.sub_scores ? (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700 border border-slate-200 shadow-2xs"
+                                  title="Functional Experience"
+                                >
+                                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Exp:</span>
+                                  <strong>{candidate.sub_scores.functionalExperience != null ? `${candidate.sub_scores.functionalExperience}/5` : "-"}</strong>
+                                </span>
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700 border border-slate-200 shadow-2xs"
+                                  title="Required Credentials"
+                                >
+                                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Creds:</span>
+                                  <strong>{candidate.sub_scores.requiredCredentials != null ? `${candidate.sub_scores.requiredCredentials}/5` : "-"}</strong>
+                                </span>
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700 border border-slate-200 shadow-2xs"
+                                  title="Role-Specific Skills"
+                                >
+                                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Skills:</span>
+                                  <strong>{candidate.sub_scores.roleSpecificSkills != null ? `${candidate.sub_scores.roleSpecificSkills}/5` : "-"}</strong>
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">-</span>
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-slate-500">{candidate.email || "-"}</td>
                           <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
                             {(() => {
@@ -363,7 +393,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
                         No candidates found.
                       </td>
                     </tr>

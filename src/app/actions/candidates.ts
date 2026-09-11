@@ -161,6 +161,32 @@ export async function searchCandidates(query: string): Promise<Candidate[]> {
   return (data as Candidate[]) ?? [];
 }
 
+export interface ExistingCandidateRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  job_id: string;
+  job_title?: string;
+  pipeline_stage: string;
+  created_at: string;
+  dnh_flag?: boolean;
+}
+
+export interface CandidateDuplicateResult {
+  isDuplicate: boolean;
+  sameJob: boolean;
+  isBatchInternalDuplicate?: boolean;
+  existingRecord?: ExistingCandidateRecord;
+}
+
+export interface BatchDuplicateCheckItem {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
 export async function checkCandidateDuplicate(
   firstName: string,
   lastName: string,
@@ -169,7 +195,7 @@ export async function checkCandidateDuplicate(
 ): Promise<{
   isDuplicate: boolean;
   sameJob: boolean;
-  existingRecord?: Partial<Candidate>;
+  existingRecord?: Partial<Candidate> & { jobs?: { title?: string } };
 }> {
   const supabase = await createClient();
 
@@ -187,7 +213,7 @@ export async function checkCandidateDuplicate(
   if (validEmail) {
     const { data } = await supabase
       .from("candidates")
-      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag")
+      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag, jobs(title)")
       .ilike("email", validEmail)
       .order("created_at", { ascending: false });
     if (data) candidates.push(...data);
@@ -196,7 +222,7 @@ export async function checkCandidateDuplicate(
   if (validFirstName && validLastName) {
     const { data } = await supabase
       .from("candidates")
-      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag")
+      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag, jobs(title)")
       .ilike("first_name", validFirstName)
       .ilike("last_name", validLastName)
       .order("created_at", { ascending: false });
@@ -220,6 +246,141 @@ export async function checkCandidateDuplicate(
     sameJob: !!sameJobRecord,
     existingRecord: sameJobRecord || uniqueCandidates[0],
   };
+}
+
+export async function checkBatchCandidateDuplicates(
+  items: BatchDuplicateCheckItem[],
+  targetJobId: string
+): Promise<Record<string, CandidateDuplicateResult>> {
+  const supabase = await createClient();
+  const results: Record<string, CandidateDuplicateResult> = {};
+
+  if (!items || items.length === 0) {
+    return results;
+  }
+
+  // 1. Identify batch-internal duplicates
+  const seenEmails = new Set<string>();
+  const seenNames = new Set<string>();
+  const batchDuplicates = new Set<string>();
+
+  for (const item of items) {
+    const isInvalidEmail = !item.email || !item.email.trim() || ["not provided", "not available", "n/a"].includes(item.email.trim().toLowerCase());
+    const validEmail = isInvalidEmail ? null : item.email?.trim().toLowerCase();
+    const nameKey = `${item.firstName?.trim().toLowerCase() || ""}_${item.lastName?.trim().toLowerCase() || ""}`;
+    const hasValidName = !!(item.firstName?.trim() && item.lastName?.trim());
+
+    let isInternalDup = false;
+    if (validEmail && seenEmails.has(validEmail)) {
+      isInternalDup = true;
+    }
+    if (hasValidName && seenNames.has(nameKey)) {
+      isInternalDup = true;
+    }
+
+    if (isInternalDup) {
+      batchDuplicates.add(item.id);
+    } else {
+      if (validEmail) seenEmails.add(validEmail);
+      if (hasValidName) seenNames.add(nameKey);
+    }
+  }
+
+  // 2. Query database for existing candidates matching emails or names
+  const validEmails = Array.from(seenEmails);
+  const matchedDbCandidates: any[] = [];
+
+  if (validEmails.length > 0) {
+    const { data: emailMatches } = await supabase
+      .from("candidates")
+      .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag, jobs(title)")
+      .in("email", validEmails);
+    if (emailMatches) matchedDbCandidates.push(...emailMatches);
+  }
+
+  // Query for name matches
+  for (const item of items) {
+    const validFirst = item.firstName?.trim();
+    const validLast = item.lastName?.trim();
+    if (validFirst && validLast) {
+      const { data: nameMatches } = await supabase
+        .from("candidates")
+        .select("id, first_name, last_name, email, job_id, pipeline_stage, created_at, dnh_flag, jobs(title)")
+        .ilike("first_name", validFirst)
+        .ilike("last_name", validLast);
+      if (nameMatches) matchedDbCandidates.push(...nameMatches);
+    }
+  }
+
+  // Deduplicate matched records by ID
+  const dbCandidatesMap = new Map<string, any>();
+  matchedDbCandidates.forEach((c) => {
+    dbCandidatesMap.set(c.id, c);
+  });
+  const allDbCandidates = Array.from(dbCandidatesMap.values())
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // 3. Match each item in batch against DB candidates
+  for (const item of items) {
+    const isInvalidEmail = !item.email || !item.email.trim() || ["not provided", "not available", "n/a"].includes(item.email.trim().toLowerCase());
+    const validEmail = isInvalidEmail ? null : item.email?.trim().toLowerCase();
+    const validFirst = item.firstName?.trim().toLowerCase();
+    const validLast = item.lastName?.trim().toLowerCase();
+    const isInternal = batchDuplicates.has(item.id);
+
+    const matches = allDbCandidates.filter((c) => {
+      if (validEmail && c.email && c.email.trim().toLowerCase() === validEmail) {
+        return true;
+      }
+      if (
+        validFirst &&
+        validLast &&
+        c.first_name?.trim().toLowerCase() === validFirst &&
+        c.last_name?.trim().toLowerCase() === validLast
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matches.length > 0) {
+      const sameJobMatch = targetJobId
+        ? matches.find((m) => m.job_id === targetJobId)
+        : undefined;
+      const targetRecord = sameJobMatch || matches[0];
+
+      results[item.id] = {
+        isDuplicate: true,
+        sameJob: !!sameJobMatch,
+        isBatchInternalDuplicate: isInternal,
+        existingRecord: {
+          id: targetRecord.id,
+          first_name: targetRecord.first_name,
+          last_name: targetRecord.last_name,
+          email: targetRecord.email,
+          job_id: targetRecord.job_id,
+          job_title: targetRecord.jobs?.title || undefined,
+          pipeline_stage: targetRecord.pipeline_stage,
+          created_at: targetRecord.created_at,
+          dnh_flag: targetRecord.dnh_flag,
+        },
+      };
+    } else if (isInternal) {
+      results[item.id] = {
+        isDuplicate: false,
+        sameJob: false,
+        isBatchInternalDuplicate: true,
+      };
+    } else {
+      results[item.id] = {
+        isDuplicate: false,
+        sameJob: false,
+        isBatchInternalDuplicate: false,
+      };
+    }
+  }
+
+  return results;
 }
 
 export async function quickAddSourcedCandidate(
@@ -808,6 +969,8 @@ export interface BatchImportCandidateInput {
   job_id: string;
   source_channel?: string;
   source_type?: string;
+  date_applied?: string;
+  date_sourced?: string;
   author_name?: string;
 }
 
@@ -822,13 +985,15 @@ export async function bulkAddCandidates(
     for (const data of candidatesData) {
       const emailVal = (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim();
       const phoneVal = (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim();
+      const today = new Date().toISOString().split("T")[0];
+      const isSourced = data.source_type === "outbound" || data.source_type === "sourced";
 
       const insertPayload: any = {
         first_name: data.first_name || "Candidate",
         last_name: data.last_name || "Unknown",
         pipeline_stage: "new_application",
         source_channel: data.source_channel || "Batch Upload",
-        source_type: data.source_type || "inbound",
+        source_type: data.source_type || (isSourced ? "outbound" : "inbound"),
         job_id: data.job_id,
         contact_info: emailVal || phoneVal || "Batch Imported",
         email: emailVal,
@@ -839,7 +1004,8 @@ export async function bulkAddCandidates(
         ai_summary: data.ai_summary,
         fit_rating: data.fit_rating,
         pending_resume: false,
-        date_applied: new Date().toISOString().split("T")[0],
+        date_applied: data.date_applied || today,
+        date_sourced: isSourced ? (data.date_sourced || today) : undefined,
         work_experience: data.work_experience ?? [],
       };
 
