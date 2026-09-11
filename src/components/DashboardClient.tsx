@@ -158,156 +158,178 @@ export function DashboardClient({
   };
 
   return (
-    <div className="flex h-screen flex-col bg-slate-50 font-sans">
-      <header className="flex h-16 shrink-0 items-center justify-between border-b bg-white px-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-semibold text-primary">Lightweight ATS</h1>
-          <div className="h-6 w-px bg-slate-200"></div>
-          {jobs.length > 0 && (
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedJobId || ""}
-                onChange={(e) => changeSelectedJob(e.target.value)}
-                className="w-[250px] rounded-md bg-slate-50 border border-slate-300 px-3 py-2 text-sm text-[#0F2C59]"
-              >
-                <option value="" disabled>
-                  Select Job Requisition
-                </option>
-                {jobs.map((job) => (
-                  <option key={job.id} value={job.id}>
-                    {job.title}
-                  </option>
-                ))}
-              </select>
-              
-              {selectedJobId && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setEditJobOpen(true)}
-                    className="p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-                    title="Edit Job"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScorecardBuilderOpen(true)}
-                    className="p-2 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition-colors"
-                    title="Scorecard Builder"
-                  >
-                    <ClipboardList className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeleteConfirmOpen(true);
-                      setDeleteCascadePrompt(false);
-                      setDeleteError("");
-                    }}
-                    className="p-2 rounded-md text-slate-500 hover:text-danger hover:bg-danger/10 transition-colors"
-                    title="Delete Job"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setCreateJobOpen(true)}
-            className="rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200"
-          >
-            New Job
-          </button>
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+      {/* Left Sidebar */}
+      <aside className="w-64 shrink-0 flex flex-col border-r border-slate-200 bg-white z-10 shadow-sm">
+        <div className="flex h-16 shrink-0 items-center px-6 border-b border-slate-100">
+          <h1 className="text-xl font-bold text-primary">Lightweight ATS</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <button
+        
+        <div className="p-4 border-b border-slate-100">
+          <SearchBar onSelectCandidate={handleSearchSelect} />
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">Menu</div>
+          <button className="flex items-center gap-3 w-full px-3 py-2 text-primary bg-primary/10 rounded-md font-medium">
+            <LayoutGrid className="w-5 h-5" />
+            Pipeline
+          </button>
+          <button 
             type="button"
             onClick={() => setAnalyticsOpen(true)}
-            className="p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors flex items-center gap-2"
-            title="Analytics"
-          >
+            className="flex items-center gap-3 w-full px-3 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-md font-medium transition-colors">
             <BarChart3 className="w-5 h-5" />
-            <span className="text-sm font-medium hidden sm:inline-block">Analytics</span>
+            Analytics
           </button>
-          <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+        </nav>
+
+        <div className="p-4 border-t border-slate-100 mt-auto">
           <RecruiterSwitcher />
-          
-          <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("kanban")}
-              className={`flex items-center justify-center rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                viewMode === "kanban"
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-              title="Kanban View"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={`flex items-center justify-center rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                viewMode === "list"
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-              title="List View"
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-
-          <SearchBar onSelectCandidate={handleSearchSelect} />
-          <select
-            value={sourceFilter}
-            onChange={(e) =>
-              setSourceFilter(e.target.value as "all" | "inbound" | "outbound")
-            }
-            className="w-[180px] rounded-md bg-white border border-slate-300 px-3 py-2 text-sm text-[#0F2C59]"
-          >
-            <option value="all">All Sources</option>
-            <option value="inbound">Direct Applicants</option>
-            <option value="outbound">Outbound Sourced</option>
-          </select>
-          <button
-            type="button"
-            onClick={() => setBatchUploadOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
-            title="Batch Resume Ingestion"
-          >
-            <Files className="h-4 w-4 text-secondary" />
-            <span>Batch Import</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickAddOpen(true)}
-            className="rounded-md bg-[#0F2C59] px-4 py-2 text-sm font-medium text-[#F8FAFC] hover:bg-[#0EA5E9]"
-          >
-            Quick Add
-          </button>
         </div>
-      </header>
+      </aside>
 
-      <main className="flex-1 overflow-auto p-6">
-        {selectedJobId ? (
-          <KanbanBoard
-            ref={kanbanRef}
-            jobId={selectedJobId}
-            searchQuery={searchQuery}
-            sourceFilter={sourceFilter}
-            viewMode={viewMode}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-slate-500">
-            Select or create a job requisition to view the pipeline.
+      {/* Main Content Area */}
+      <div className="flex flex-1 flex-col overflow-hidden bg-slate-50">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b bg-white px-6">
+          <div className="flex items-center gap-4">
+            {jobs.length > 0 && (
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedJobId || ""}
+                  onChange={(e) => changeSelectedJob(e.target.value)}
+                  className="w-[250px] rounded-md bg-slate-50 border border-slate-300 px-3 py-2 text-sm text-[#0F2C59]"
+                >
+                  <option value="" disabled>
+                    Select Job Requisition
+                  </option>
+                  {jobs.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.title}
+                    </option>
+                  ))}
+                </select>
+                
+                {selectedJobId && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditJobOpen(true)}
+                      className="p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                      title="Edit Job"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScorecardBuilderOpen(true)}
+                      className="p-2 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition-colors"
+                      title="Scorecard Builder"
+                    >
+                      <ClipboardList className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteConfirmOpen(true);
+                        setDeleteCascadePrompt(false);
+                        setDeleteError("");
+                      }}
+                      className="p-2 rounded-md text-slate-500 hover:text-danger hover:bg-danger/10 transition-colors"
+                      title="Delete Job"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setCreateJobOpen(true)}
+              className="rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 ml-2"
+            >
+              New Job
+            </button>
           </div>
-        )}
-      </main>
+          
+          <div className="flex items-center gap-4">
+            <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("kanban")}
+                className={`flex items-center justify-center rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "kanban"
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+                title="Kanban View"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`flex items-center justify-center rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "list"
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+                title="List View"
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+
+            <select
+              value={sourceFilter}
+              onChange={(e) =>
+                setSourceFilter(e.target.value as "all" | "inbound" | "outbound")
+              }
+              className="w-[180px] rounded-md bg-white border border-slate-300 px-3 py-2 text-sm text-[#0F2C59]"
+            >
+              <option value="all">All Sources</option>
+              <option value="inbound">Direct Applicants</option>
+              <option value="outbound">Outbound Sourced</option>
+            </select>
+            
+            <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+            
+            <button
+              type="button"
+              onClick={() => setBatchUploadOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
+              title="Batch Resume Ingestion"
+            >
+              <Files className="h-4 w-4 text-secondary" />
+              <span className="hidden sm:inline-block">Batch Import</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickAddOpen(true)}
+              className="rounded-md bg-[#0F2C59] px-4 py-2 text-sm font-medium text-[#F8FAFC] hover:bg-[#0EA5E9]"
+            >
+              Quick Add
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-auto p-6">
+          {selectedJobId ? (
+            <KanbanBoard
+              ref={kanbanRef}
+              jobId={selectedJobId}
+              searchQuery={searchQuery}
+              sourceFilter={sourceFilter}
+              viewMode={viewMode}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-slate-500">
+              Select or create a job requisition to view the pipeline.
+            </div>
+          )}
+        </main>
+      </div>
 
       <QuickAddSourcedModal
         open={quickAddOpen}
