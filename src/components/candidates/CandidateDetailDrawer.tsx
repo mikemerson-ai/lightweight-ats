@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit, RefreshCw, FileText, Upload } from "lucide-react";
+import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit, RefreshCw, FileText, Upload, Check } from "lucide-react";
 import {
   type Candidate,
   getCandidateActivity,
@@ -14,6 +14,11 @@ import {
   getCandidateById,
   type ActivityLogEntry,
 } from "@/app/actions/candidates";
+import { getGroupHomes } from "@/app/actions/groupHomes";
+import type { GroupHome } from "@/types/groupHomes";
+import { SHIFT_OPTIONS } from "@/types/groupHomes";
+import { DspCommuteBreakdownWidget } from "@/components/candidates/DspCommuteBreakdownWidget";
+import { normalizeZipCode } from "@/lib/geo/commute";
 import {
   addDocumentRequirement,
   getCandidateDocuments,
@@ -264,12 +269,61 @@ export function CandidateDetailDrawer({
 }: CandidateDetailDrawerProps) {
   const [localCandidate, setLocalCandidate] = useState<Candidate | null>(candidate);
   const [isReEvaluating, setIsReEvaluating] = useState(false);
+  const [groupHomes, setGroupHomes] = useState<GroupHome[]>([]);
 
   useEffect(() => {
     setLocalCandidate(candidate);
   }, [candidate]);
 
+  useEffect(() => {
+    if (candidate) {
+      getGroupHomes()
+        .then(setGroupHomes)
+        .catch((err) => console.error("Failed to load group homes:", err));
+    }
+  }, [candidate?.id]);
+
   const activeCandidate = localCandidate || candidate;
+
+  const isDsp = Boolean(
+    activeCandidate?.jobs?.title?.toLowerCase().includes("dsp") ||
+    activeCandidate?.jobs?.title?.toLowerCase().includes("direct support") ||
+    activeCandidate?.jobs?.title?.toLowerCase().includes("caregiver") ||
+    activeCandidate?.primary_skills?.toLowerCase().includes("direct support")
+  );
+
+  async function handleUpdateZip(newZip: string) {
+    if (!activeCandidate) return;
+    const res = await updateCandidateProfile(activeCandidate.id, {
+      zip_code: newZip,
+    });
+    if (res.success) {
+      const updated = { ...activeCandidate, zip_code: newZip };
+      setLocalCandidate(updated);
+      onCandidateUpdated?.(updated);
+    } else {
+      alert("Failed to update ZIP code: " + res.error);
+    }
+  }
+
+  async function handleToggleShift(shift: string) {
+    if (!activeCandidate) return;
+    const currentShifts = activeCandidate.shift_preferences || [];
+    const nextShifts = currentShifts.includes(shift)
+      ? currentShifts.filter((s) => s !== shift)
+      : [...currentShifts, shift];
+
+    const res = await updateCandidateProfile(activeCandidate.id, {
+      shift_preferences: nextShifts,
+    });
+    if (res.success) {
+      const updated = { ...activeCandidate, shift_preferences: nextShifts };
+      setLocalCandidate(updated);
+      onCandidateUpdated?.(updated);
+    } else {
+      alert("Failed to update shift preferences: " + res.error);
+    }
+  }
 
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
   const [documents, setDocuments] = useState<CandidateDocument[]>([]);
@@ -306,6 +360,8 @@ export function CandidateDetailDrawer({
     email: "",
     phone: "",
     address: "",
+    zip_code: "",
+    shift_preferences: [] as string[],
     primary_skills: "",
     years_of_experience: "" as string | number,
     date_applied: "",
@@ -325,9 +381,19 @@ export function CandidateDetailDrawer({
         date_applied: editForm.date_applied || undefined,
         date_sourced: editForm.date_sourced || undefined,
         linkedin_url: editForm.linkedin_url || undefined,
+        zip_code: editForm.zip_code?.trim() || null,
+        shift_preferences: editForm.shift_preferences || [],
       });
+      const updated = {
+        ...activeCandidate,
+        ...editForm,
+        years_of_experience: editForm.years_of_experience ? Number(editForm.years_of_experience) : null,
+        zip_code: editForm.zip_code?.trim() || null,
+        shift_preferences: editForm.shift_preferences || [],
+      } as Candidate;
+      setLocalCandidate(updated);
+      onCandidateUpdated?.(updated);
       setShowEditModal(false);
-      window.location.reload();
     } catch (err: any) {
       alert("Failed to update profile: " + err.message);
     } finally {
@@ -482,6 +548,8 @@ export function CandidateDetailDrawer({
         email: candidate.email || "",
         phone: candidate.phone || "",
         address: candidate.address || "",
+        zip_code: candidate.zip_code || "",
+        shift_preferences: candidate.shift_preferences || [],
         primary_skills: candidate.primary_skills || "",
         years_of_experience: candidate.years_of_experience || "",
         date_applied: candidate.date_applied ? candidate.date_applied.split("T")[0] : "",
@@ -586,6 +654,8 @@ export function CandidateDetailDrawer({
                         email: activeCandidate.email || "",
                         phone: activeCandidate.phone || "",
                         address: activeCandidate.address || "",
+                        zip_code: activeCandidate.zip_code || "",
+                        shift_preferences: activeCandidate.shift_preferences || [],
                         primary_skills: activeCandidate.primary_skills || "",
                         years_of_experience: activeCandidate.years_of_experience ?? "",
                         date_applied: activeCandidate.date_applied?.split("T")[0] || "",
@@ -707,6 +777,11 @@ export function CandidateDetailDrawer({
                   <MapPin className="h-3.5 w-3.5" /> {candidate.address}
                 </span>
               )}
+              {(activeCandidate?.zip_code ?? candidate.zip_code) && (
+                <span className="flex items-center gap-1 bg-white/15 px-2 py-0.5 rounded-full border border-white/20 font-medium">
+                  <MapPin className="h-3 w-3 text-sky-200" /> ZIP: {activeCandidate?.zip_code ?? candidate.zip_code}
+                </span>
+              )}
               {candidate.linkedin_url && (
                 <a
                   href={candidate.linkedin_url.startsWith("http") ? candidate.linkedin_url : `https://${candidate.linkedin_url}`}
@@ -730,6 +805,42 @@ export function CandidateDetailDrawer({
                 <Sparkles className="h-3.5 w-3.5 text-amber-300" />
                 <span>AI Outreach</span>
               </button>
+            </div>
+
+            {/* Quick Shift Preferences Pill Toggles */}
+            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/15 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-white/80 font-medium text-[11px]">Shifts:</span>
+                <div className="flex items-center gap-1.5">
+                  {SHIFT_OPTIONS.map((shift) => {
+                    const isSelected = (activeCandidate?.shift_preferences ?? candidate.shift_preferences)?.includes(shift.id);
+                    return (
+                      <button
+                        key={shift.id}
+                        type="button"
+                        onClick={() => handleToggleShift(shift.id)}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition cursor-pointer border ${
+                          isSelected
+                            ? "bg-white text-primary font-bold border-white shadow-xs"
+                            : "bg-white/10 text-white/85 border-white/20 hover:bg-white/20"
+                        }`}
+                        title={`Toggle ${shift.label} Shift`}
+                      >
+                        <span>{shift.icon}</span>
+                        <span>{shift.label}</span>
+                        {isSelected && <Check className="h-3 w-3 text-primary stroke-[3]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="text-[11px] text-white/70">
+                {(activeCandidate?.zip_code ?? candidate.zip_code) ? (
+                  <span>📍 ZIP: {activeCandidate?.zip_code ?? candidate.zip_code}</span>
+                ) : (
+                  <span className="text-amber-200">⚠ No ZIP set</span>
+                )}
+              </div>
             </div>
           </div>
           
@@ -811,9 +922,69 @@ export function CandidateDetailDrawer({
                         <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Address</label>
+                        <input
+                          type="text"
+                          value={editForm.address}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const parsed = normalizeZipCode(val);
+                            setEditForm({
+                              ...editForm,
+                              address: val,
+                              zip_code: parsed && !editForm.zip_code ? parsed : editForm.zip_code,
+                            });
+                          }}
+                          className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Street, City, State"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">ZIP Code</label>
+                        <input
+                          type="text"
+                          value={editForm.zip_code}
+                          onChange={(e) => setEditForm({ ...editForm, zip_code: e.target.value })}
+                          className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="e.g. 19151"
+                          maxLength={5}
+                        />
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Address</label>
-                      <input type="text" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="City, State" />
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Shift Preferences</label>
+                      <div className="flex items-center gap-2">
+                        {SHIFT_OPTIONS.map((shift) => {
+                          const isSelected = editForm.shift_preferences?.includes(shift.id);
+                          return (
+                            <button
+                              key={shift.id}
+                              type="button"
+                              onClick={() => {
+                                const current = editForm.shift_preferences || [];
+                                setEditForm({
+                                  ...editForm,
+                                  shift_preferences: current.includes(shift.id)
+                                    ? current.filter((s) => s !== shift.id)
+                                    : [...current, shift.id],
+                                });
+                              }}
+                              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold border transition cursor-pointer ${
+                                isSelected
+                                  ? "bg-primary text-white border-primary shadow-xs"
+                                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              <span>{shift.icon}</span>
+                              <span>{shift.label}</span>
+                              {isSelected && <Check className="h-3 w-3 ml-0.5 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">LinkedIn Profile URL</label>
@@ -884,6 +1055,16 @@ export function CandidateDetailDrawer({
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* DSP Commute Breakdown Widget (Rendered for DSP candidates) */}
+            {isDsp && (
+              <DspCommuteBreakdownWidget
+                candidate={activeCandidate || candidate}
+                groupHomes={groupHomes}
+                onUpdateZip={handleUpdateZip}
+                onToggleShift={handleToggleShift}
+              />
             )}
 
             {/* Candidate Resume Document Card */}

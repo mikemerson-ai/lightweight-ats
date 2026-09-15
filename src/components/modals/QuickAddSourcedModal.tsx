@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Upload, X } from "lucide-react";
+import { Loader2, Upload, X, Check } from "lucide-react";
 import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume, uploadCandidateResume, type Candidate } from "@/app/actions/candidates";
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,8 @@ import { parseResumeAction } from "@/app/actions/resumeParser";
 import type { ParsedCandidate, SubScores } from "@/lib/gemini/parser";
 import { getJobs, type Job } from "@/app/actions/jobs";
 import { useRecruiter } from "@/context/RecruiterContext";
+import { SHIFT_OPTIONS } from "@/types/groupHomes";
+import { normalizeZipCode } from "@/lib/geo/commute";
 
 interface QuickAddSourcedModalProps {
   open: boolean;
@@ -32,6 +34,8 @@ export function QuickAddSourcedModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [shiftPreferences, setShiftPreferences] = useState<string[]>([]);
   const [primarySkills, setPrimarySkills] = useState("");
   const [yearsOfExperience, setYearsOfExperience] = useState("");
   const [aiSummary, setAiSummary] = useState("");
@@ -107,6 +111,8 @@ export function QuickAddSourcedModal({
     setEmail("");
     setPhone("");
     setAddress("");
+    setZipCode("");
+    setShiftPreferences([]);
     setPrimarySkills("");
     setYearsOfExperience("");
     setAiSummary("");
@@ -127,7 +133,11 @@ export function QuickAddSourcedModal({
     if (parsedName) setFullName(parsedName);
     if (data.email) setEmail(data.email);
     if (data.phone) setPhone(data.phone);
-    if (data.address) setAddress(data.address);
+    if (data.address) {
+      setAddress(data.address);
+      const parsedZip = normalizeZipCode(data.address);
+      if (parsedZip) setZipCode(parsedZip);
+    }
     if (data.primarySkills?.length) {
       setPrimarySkills(data.primarySkills.join(", "));
     }
@@ -264,6 +274,8 @@ export function QuickAddSourcedModal({
         email: email,
         phone: phone,
         address: address,
+        zip_code: zipCode ? zipCode.trim() : undefined,
+        shift_preferences: shiftPreferences,
         primary_skills: primarySkills,
         years_of_experience: yearsOfExperience
           ? Number(yearsOfExperience)
@@ -477,16 +489,68 @@ export function QuickAddSourcedModal({
             </label>
           </div>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-primary">Address</span>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="e.g. 123 Main St, Anytown, CA 12345"
-              className={inputClass}
-            />
-          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <label className="sm:col-span-2 flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-primary">Address</span>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => {
+                  setAddress(e.target.value);
+                  const parsed = normalizeZipCode(e.target.value);
+                  if (parsed && !zipCode) {
+                    setZipCode(parsed);
+                  }
+                }}
+                placeholder="e.g. 123 Main St, Philadelphia, PA"
+                className={inputClass}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-primary">ZIP Code</span>
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                placeholder="e.g. 19151"
+                maxLength={5}
+                className={inputClass}
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-primary">Shift Preferences</span>
+              <span className="text-xs text-slate-400">Select any shifts candidate is available for</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {SHIFT_OPTIONS.map((shift) => {
+                const isSelected = shiftPreferences.includes(shift.id);
+                return (
+                  <button
+                    key={shift.id}
+                    type="button"
+                    onClick={() => {
+                      setShiftPreferences((prev) =>
+                        prev.includes(shift.id) ? prev.filter((s) => s !== shift.id) : [...prev, shift.id]
+                      );
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer border ${
+                      isSelected
+                        ? "bg-primary text-white border-primary shadow-xs"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span>{shift.icon}</span>
+                    <span>{shift.label}</span>
+                    {isSelected && <Check className="h-3 w-3 ml-0.5 text-white" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-primary">

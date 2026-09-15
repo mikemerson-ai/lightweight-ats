@@ -48,6 +48,8 @@ export interface QuickAddSourcedCandidateInput {
   date_sourced?: string;
   author_name?: string;
   address?: string;
+  zip_code?: string;
+  shift_preferences?: string[];
   resume_text?: string | null;
   resume_url?: string | null;
   resume_storage_path?: string | null;
@@ -87,6 +89,8 @@ export interface Candidate {
   dnh_recruiter?: string | null;
   jobs: { title: string } | null;
   address?: string;
+  zip_code?: string | null;
+  shift_preferences?: string[];
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
   evaluations?: Evaluation[];
 }
@@ -429,6 +433,12 @@ export async function quickAddSourcedCandidate(
   if (data.resume_storage_path) {
     insertPayload.resume_storage_path = data.resume_storage_path;
   }
+  if (data.zip_code) {
+    insertPayload.zip_code = data.zip_code.trim();
+  }
+  if (data.shift_preferences && data.shift_preferences.length > 0) {
+    insertPayload.shift_preferences = data.shift_preferences;
+  }
 
   let { data: candidate, error } = await supabase
     .from("candidates")
@@ -437,11 +447,21 @@ export async function quickAddSourcedCandidate(
     .single();
 
   // If column doesn't exist yet in the database schema, gracefully retry without new columns
-  if (error && (error.message?.includes("resume_text") || error.message?.includes("sub_scores") || error.message?.includes("resume_url") || error.message?.includes("resume_storage_path"))) {
+  if (
+    error &&
+    (error.message?.includes("resume_text") ||
+      error.message?.includes("sub_scores") ||
+      error.message?.includes("resume_url") ||
+      error.message?.includes("resume_storage_path") ||
+      error.message?.includes("zip_code") ||
+      error.message?.includes("shift_preferences"))
+  ) {
     delete insertPayload.resume_text;
     delete insertPayload.sub_scores;
     delete insertPayload.resume_url;
     delete insertPayload.resume_storage_path;
+    delete insertPayload.zip_code;
+    delete insertPayload.shift_preferences;
     const retry = await supabase
       .from("candidates")
       .insert(insertPayload)
@@ -907,6 +927,8 @@ export async function updateCandidateProfile(
     email?: string | null;
     phone?: string | null;
     address?: string;
+    zip_code?: string | null;
+    shift_preferences?: string[];
     primary_skills?: string;
     years_of_experience?: number | null;
     date_applied?: string;
@@ -916,7 +938,7 @@ export async function updateCandidateProfile(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
-  const cleanData = { ...updateData };
+  const cleanData: any = { ...updateData };
   if (cleanData.linkedin_url) {
     cleanData.linkedin_url = cleanData.linkedin_url.trim();
   }
@@ -926,11 +948,25 @@ export async function updateCandidateProfile(
   if (cleanData.phone) {
     cleanData.phone = ["not provided", "not available", "n/a"].includes(cleanData.phone.trim().toLowerCase()) ? null : cleanData.phone.trim();
   }
+  if (cleanData.zip_code) {
+    cleanData.zip_code = cleanData.zip_code.trim();
+  }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("candidates")
     .update({ ...cleanData, updated_at: new Date().toISOString() })
     .eq("id", candidateId);
+
+  // If column doesn't exist yet in the database schema, gracefully retry without new columns
+  if (error && (error.message?.includes("zip_code") || error.message?.includes("shift_preferences"))) {
+    delete cleanData.zip_code;
+    delete cleanData.shift_preferences;
+    const retry = await supabase
+      .from("candidates")
+      .update({ ...cleanData, updated_at: new Date().toISOString() })
+      .eq("id", candidateId);
+    error = retry.error;
+  }
 
   if (error) {
     return { success: false, error: error.message };
@@ -1171,6 +1207,8 @@ export interface BatchImportCandidateInput {
   email?: string;
   phone?: string;
   address?: string;
+  zip_code?: string;
+  shift_preferences?: string[];
   primary_skills?: string;
   years_of_experience?: number | null;
   ai_summary?: string | null;
@@ -1211,6 +1249,8 @@ export async function bulkAddCandidates(
         email: emailVal,
         phone: phoneVal,
         address: data.address,
+        zip_code: data.zip_code?.trim() || null,
+        shift_preferences: data.shift_preferences || [],
         primary_skills: data.primary_skills,
         years_of_experience: data.years_of_experience,
         ai_summary: data.ai_summary,
@@ -1230,9 +1270,17 @@ export async function bulkAddCandidates(
         .select("*, jobs(title)")
         .single();
 
-      if (error && (error.message?.includes("resume_text") || error.message?.includes("sub_scores"))) {
+      if (
+        error &&
+        (error.message?.includes("resume_text") ||
+          error.message?.includes("sub_scores") ||
+          error.message?.includes("zip_code") ||
+          error.message?.includes("shift_preferences"))
+      ) {
         delete insertPayload.resume_text;
         delete insertPayload.sub_scores;
+        delete insertPayload.zip_code;
+        delete insertPayload.shift_preferences;
         const retry = await supabase
           .from("candidates")
           .insert(insertPayload)
@@ -1350,5 +1398,28 @@ export async function bulkAddCandidates(
   } catch (err: any) {
     console.error("Error during batch candidate creation:", err);
     return { success: false, count: 0, errors: [err.message || "Unexpected batch error"] };
+  }
+}
+
+/**
+ * Fetch all candidates for DSP Proximity and Lead Matching view.
+ */
+export async function getDspCandidates(): Promise<Candidate[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("candidates")
+      .select("*, jobs(id, title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.warn("Failed to fetch DSP candidates:", error.message);
+      return [];
+    }
+
+    return (data as Candidate[]) ?? [];
+  } catch (err) {
+    console.error("Error in getDspCandidates:", err);
+    return [];
   }
 }
