@@ -203,8 +203,9 @@ export function QuickAddSourcedModal({
         return;
       }
       applyParsedData(result.data);
-    } catch {
-      setError("Something went wrong while parsing the resume. Please try again.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Something went wrong while parsing the resume. Please try again.");
     } finally {
       setParsing(false);
     }

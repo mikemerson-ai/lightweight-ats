@@ -406,119 +406,115 @@ export async function checkBatchCandidateDuplicates(
 export async function quickAddSourcedCandidate(
   data: QuickAddSourcedCandidateInput,
 ): Promise<{ success: boolean; candidate?: Candidate; error?: string }> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const insertPayload: any = {
-    first_name: data.first_name,
-    last_name: data.last_name,
-    pipeline_stage: "new_application",
-    source_channel: data.source_channel,
-    source_type: data.source_type || "outbound",
-    job_id: data.job_id,
-    contact_info: data.contact_info,
-    linkedin_url: data.linkedin_url,
-    email: (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim(),
-    phone: (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim(),
-    primary_skills: data.primary_skills,
-    years_of_experience: data.years_of_experience,
-    ai_summary: data.ai_summary,
-    fit_rating: data.fit_rating,
-    pending_resume: data.pending_resume ?? true,
-    date_applied: data.date_applied,
-    date_sourced: data.date_sourced,
-    address: data.address,
-    work_experience: data.work_experience ?? [],
-  };
+    const insertPayload: any = {
+      first_name: data.first_name,
+      last_name: data.last_name,
+      pipeline_stage: "new_application",
+      source_channel: data.source_channel,
+      source_type: data.source_type || "outbound",
+      job_id: data.job_id,
+      contact_info: data.contact_info,
+      linkedin_url: data.linkedin_url,
+      email: (!data.email || ["not provided", "not available", "n/a"].includes(data.email.trim().toLowerCase())) ? null : data.email.trim(),
+      phone: (!data.phone || ["not provided", "not available", "n/a"].includes(data.phone.trim().toLowerCase())) ? null : data.phone.trim(),
+      primary_skills: data.primary_skills,
+      years_of_experience: data.years_of_experience,
+      ai_summary: data.ai_summary,
+      fit_rating: data.fit_rating,
+      pending_resume: data.pending_resume ?? true,
+      date_applied: data.date_applied,
+      date_sourced: data.date_sourced,
+      address: data.address,
+      work_experience: data.work_experience ?? [],
+    };
 
-  if (data.resume_text) {
-    insertPayload.resume_text = data.resume_text;
-  }
-  if (data.sub_scores) {
-    insertPayload.sub_scores = data.sub_scores;
-  }
-  if (data.resume_url) {
-    insertPayload.resume_url = data.resume_url;
-  }
-  if (data.resume_storage_path) {
-    insertPayload.resume_storage_path = data.resume_storage_path;
-  }
-  if (data.zip_code) {
-    insertPayload.zip_code = data.zip_code.trim();
-  }
-  if (data.shift_preferences && data.shift_preferences.length > 0) {
-    insertPayload.shift_preferences = data.shift_preferences;
-  }
+    if (data.resume_text) insertPayload.resume_text = data.resume_text;
+    if (data.sub_scores) insertPayload.sub_scores = data.sub_scores;
+    if (data.resume_url) insertPayload.resume_url = data.resume_url;
+    if (data.resume_storage_path) insertPayload.resume_storage_path = data.resume_storage_path;
+    if (data.zip_code) insertPayload.zip_code = data.zip_code.trim();
+    if (data.shift_preferences && data.shift_preferences.length > 0) {
+      insertPayload.shift_preferences = data.shift_preferences;
+    }
 
-  let { data: candidate, error } = await supabase
-    .from("candidates")
-    .insert(insertPayload)
-    .select("*, jobs(title)")
-    .single();
-
-  // If column doesn't exist yet in the database schema, gracefully retry without new columns
-  if (
-    error &&
-    (error.message?.includes("resume_text") ||
-      error.message?.includes("sub_scores") ||
-      error.message?.includes("resume_url") ||
-      error.message?.includes("resume_storage_path") ||
-      error.message?.includes("zip_code") ||
-      error.message?.includes("shift_preferences"))
-  ) {
-    delete insertPayload.resume_text;
-    delete insertPayload.sub_scores;
-    delete insertPayload.resume_url;
-    delete insertPayload.resume_storage_path;
-    delete insertPayload.zip_code;
-    delete insertPayload.shift_preferences;
-    const retry = await supabase
+    let { data: candidate, error } = await supabase
       .from("candidates")
       .insert(insertPayload)
       .select("*, jobs(title)")
       .single();
-    candidate = retry.data;
-    error = retry.error;
-  }
 
-  if (error) {
-    if (error.code === "23505") {
-      return { success: false, error: "A candidate with this email already exists." };
+    if (
+      error &&
+      (error.message?.includes("resume_text") ||
+        error.message?.includes("sub_scores") ||
+        error.message?.includes("resume_url") ||
+        error.message?.includes("resume_storage_path") ||
+        error.message?.includes("zip_code") ||
+        error.message?.includes("shift_preferences"))
+    ) {
+      delete insertPayload.resume_text;
+      delete insertPayload.sub_scores;
+      delete insertPayload.resume_url;
+      delete insertPayload.resume_storage_path;
+      delete insertPayload.zip_code;
+      delete insertPayload.shift_preferences;
+      const retry = await supabase
+        .from("candidates")
+        .insert(insertPayload)
+        .select("*, jobs(title)")
+        .single();
+      candidate = retry.data;
+      error = retry.error;
     }
-    return { success: false, error: error.message };
-  }
 
-  const logPayload = {
-    candidate_id: candidate.id,
-    activity_type: "Candidate Created",
-    notes: data.notes || "Candidate profile created",
-    author_name: data.author_name || "Recruiter",
-  };
+    if (error) {
+      if (error.code === "23505") {
+        return { success: false, error: "A candidate with this email already exists." };
+      }
+      return { success: false, error: error.message };
+    }
 
-  const { error: createLogError } = await supabase
-    .from("activity_logs")
-    .insert(logPayload);
-
-  if (createLogError) {
-    return { success: false, error: createLogError.message };
-  }
-
-  if (data.outreach_notes) {
-    const { error: logError } = await supabase.from("activity_logs").insert({
+    const logPayload = {
       candidate_id: candidate.id,
-      activity_type: "outreach_note",
-      notes: data.outreach_notes,
+      activity_type: "Candidate Created",
+      notes: data.notes || "Candidate profile created",
       author_name: data.author_name || "Recruiter",
-    });
+    };
 
-    if (logError) {
-      return { success: false, error: logError.message };
+    const { error: createLogError } = await supabase
+      .from("activity_logs")
+      .insert(logPayload);
+
+    if (createLogError) {
+      console.warn("Failed to create activity log for new candidate:", createLogError);
     }
+
+    if (data.outreach_notes) {
+      const { error: logError } = await supabase.from("activity_logs").insert({
+        candidate_id: candidate.id,
+        activity_type: "outreach_note",
+        notes: data.outreach_notes,
+        author_name: data.author_name || "Recruiter",
+      });
+
+      if (logError) {
+        console.warn("Failed to create outreach note for candidate:", logError);
+      }
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return { success: true, candidate: candidate as Candidate };
+  } catch (err: any) {
+    console.error("Exception in quickAddSourcedCandidate:", err);
+    return { success: false, error: err.message || "An unexpected error occurred while adding the candidate" };
   }
-
-  revalidatePath("/");
-
-  return { success: true, candidate: candidate as Candidate };
 }
+
 
 export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
   const supabase = await createClient();
@@ -543,76 +539,82 @@ export async function updateCandidateStage(
   disqualificationReason?: string,
   recruiterName?: string,
 ): Promise<StageTransitionResult> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  if (newStage === HIRED_STAGE) {
-    const guardrail = await checkHiredGuardrail(supabase, candidateId);
-    if (!guardrail.compliant) {
-      return {
-        success: false,
-        blocked: true,
-        missingDocs: guardrail.missingDocs,
-        expiredDocs: guardrail.expiredDocs,
-      };
+    if (newStage === HIRED_STAGE) {
+      const guardrail = await checkHiredGuardrail(supabase, candidateId);
+      if (!guardrail.compliant) {
+        return {
+          success: false,
+          blocked: true,
+          missingDocs: guardrail.missingDocs,
+          expiredDocs: guardrail.expiredDocs,
+        };
+      }
     }
-  }
 
-  if (newStage === DISQUALIFIED_STAGE) {
-    if (!disqualificationReason || !disqualificationReason.trim()) {
+    if (newStage === DISQUALIFIED_STAGE) {
+      if (!disqualificationReason || !disqualificationReason.trim()) {
+        return {
+          success: false,
+          blocked: false,
+          error: "A disqualification reason is required to reject a candidate.",
+        };
+      }
+      if (!DISQUALIFICATION_REASONS.includes(disqualificationReason)) {
+        return {
+          success: false,
+          blocked: false,
+          error: `Invalid disqualification reason: "${disqualificationReason}".`,
+        };
+      }
+    }
+
+    const updateData: any = { pipeline_stage: newStage };
+
+    const { error } = await supabase
+      .from("candidates")
+      .update(updateData)
+      .eq("id", candidateId);
+
+    if (error) {
       return {
         success: false,
         blocked: false,
-        error: "A disqualification reason is required to reject a candidate.",
+        error: error.message,
       };
     }
-    if (!DISQUALIFICATION_REASONS.includes(disqualificationReason)) {
+
+    let notes = `Moved to ${newStage}`;
+    if (newStage === DISQUALIFIED_STAGE && disqualificationReason) {
+      notes = `Disqualified. Reason: ${disqualificationReason}`;
+    }
+
+    const { error: logError } = await supabase.from("activity_logs").insert({
+      candidate_id: candidateId,
+      activity_type:
+        newStage === DISQUALIFIED_STAGE ? "Disqualified" : "Stage Change",
+      notes,
+      author_name: recruiterName || "Recruiter",
+    });
+
+    if (logError) {
       return {
         success: false,
         blocked: false,
-        error: `Invalid disqualification reason: "${disqualificationReason}".`,
+        error: logError.message,
       };
     }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return { success: true, blocked: false };
+  } catch (err: any) {
+    console.error("Error in updateCandidateStage:", err);
+    return { success: false, blocked: false, error: err.message || "An unexpected error occurred" };
   }
-
-  const updateData: any = { pipeline_stage: newStage };
-
-  const { error } = await supabase
-    .from("candidates")
-    .update(updateData)
-    .eq("id", candidateId);
-
-  if (error) {
-    return {
-      success: false,
-      blocked: false,
-      error: error.message,
-    };
-  }
-
-  let notes = `Moved to ${newStage}`;
-  if (newStage === DISQUALIFIED_STAGE && disqualificationReason) {
-    notes = `Disqualified. Reason: ${disqualificationReason}`;
-  }
-
-  const { error: logError } = await supabase.from("activity_logs").insert({
-    candidate_id: candidateId,
-    activity_type:
-      newStage === DISQUALIFIED_STAGE ? "Disqualified" : "Stage Change",
-    notes,
-    author_name: recruiterName || "Recruiter",
-  });
-
-  if (logError) {
-    return {
-      success: false,
-      blocked: false,
-      error: logError.message,
-    };
-  }
-
-  revalidatePath("/");
-
-  return { success: true, blocked: false };
 }
 
 interface HiredGuardrailResult {
@@ -797,110 +799,125 @@ export async function uploadCandidateResume(
 }
 
 export async function deleteCandidateResume(candidateId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const { data: candidate } = await supabase
-    .from("candidates")
-    .select("resume_storage_path")
-    .eq("id", candidateId)
-    .single();
+    const { data: candidate } = await supabase
+      .from("candidates")
+      .select("resume_storage_path")
+      .eq("id", candidateId)
+      .single();
 
-  if (candidate?.resume_storage_path) {
-    try {
-      await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
-    } catch (e) {
-      console.warn("Failed to remove resume from storage:", e);
+    if (candidate?.resume_storage_path) {
+      try {
+        await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
+      } catch (e) {
+        console.warn("Failed to remove resume from storage:", e);
+      }
     }
+
+    const { error } = await supabase
+      .from("candidates")
+      .update({
+        resume_url: null,
+        resume_storage_path: null,
+        pending_resume: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", candidateId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in deleteCandidateResume:", err);
+    return { success: false, error: err.message || "An unexpected error occurred" };
   }
-
-  const { error } = await supabase
-    .from("candidates")
-    .update({
-      resume_url: null,
-      resume_storage_path: null,
-      pending_resume: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", candidateId);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  const { revalidatePath } = await import("next/cache");
-  revalidatePath("/");
-  return { success: true };
 }
 
 export async function deleteCandidate(candidateId: string): Promise<void> {
-  const supabase = await createClient();
-
-  // 1. Fetch candidate to check for stored resume file
-  const { data: candidate } = await supabase
-    .from("candidates")
-    .select("resume_storage_path")
-    .eq("id", candidateId)
-    .single();
-
-  // 2. Clean up stored resume file from Supabase Storage
-  if (candidate?.resume_storage_path) {
-    try {
-      await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
-    } catch (storageErr) {
-      console.error("Failed to delete resume file from storage:", storageErr);
-    }
-  }
-
-  // Also clean up any lingering files in the candidate's storage folder
   try {
-    const { data: files } = await supabase.storage.from("resumes").list(candidateId);
-    if (files && files.length > 0) {
-      const pathsToDelete = files.map((f) => `${candidateId}/${f.name}`);
-      await supabase.storage.from("resumes").remove(pathsToDelete);
+    const supabase = await createClient();
+
+    // 1. Fetch candidate to check for stored resume file
+    const { data: candidate } = await supabase
+      .from("candidates")
+      .select("resume_storage_path")
+      .eq("id", candidateId)
+      .single();
+
+    // 2. Clean up stored resume file from Supabase Storage
+    if (candidate?.resume_storage_path) {
+      try {
+        await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
+      } catch (storageErr) {
+        console.error("Failed to delete resume file from storage:", storageErr);
+      }
     }
-  } catch (err) {
-    console.warn("Could not list/clean storage folder for candidate:", err);
+
+    // Also clean up any lingering files in the candidate's storage folder
+    try {
+      const { data: files } = await supabase.storage.from("resumes").list(candidateId);
+      if (files && files.length > 0) {
+        const pathsToDelete = files.map((f) => `${candidateId}/${f.name}`);
+        await supabase.storage.from("resumes").remove(pathsToDelete);
+      }
+    } catch (err) {
+      console.warn("Could not list/clean storage folder for candidate:", err);
+    }
+
+    // 3. Delete associated records manually to ensure they are removed if cascading deletes aren't configured
+    await supabase.from("activity_logs").delete().eq("candidate_id", candidateId);
+    await supabase.from("document_checklists").delete().eq("candidate_id", candidateId);
+    await supabase.from("evaluations").delete().eq("candidate_id", candidateId);
+
+    const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+    
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+  } catch (err: any) {
+    console.error("Error in deleteCandidate:", err);
+    throw new Error(err.message || "An unexpected error occurred while deleting candidate.");
   }
-
-  // 3. Delete associated records manually to ensure they are removed if cascading deletes aren't configured
-  await supabase.from("activity_logs").delete().eq("candidate_id", candidateId);
-  await supabase.from("document_checklists").delete().eq("candidate_id", candidateId);
-  await supabase.from("evaluations").delete().eq("candidate_id", candidateId);
-
-  const { error } = await supabase.from("candidates").delete().eq("id", candidateId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-  
-  const { revalidatePath } = await import("next/cache");
-  revalidatePath("/");
 }
 
 export async function setCandidateDNHStatus(
   candidateId: string,
   dnhData: { dnh_flag: boolean; dnh_reason?: string; dnh_date?: string; dnh_recruiter?: string; }
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("candidates")
-    .update({
-      dnh_flag: dnhData.dnh_flag,
-      dnh_reason: dnhData.dnh_reason || null,
-      dnh_date: dnhData.dnh_date || null,
-      dnh_recruiter: dnhData.dnh_recruiter || null,
-    })
-    .eq("id", candidateId);
+    const { error } = await supabase
+      .from("candidates")
+      .update({
+        dnh_flag: dnhData.dnh_flag,
+        dnh_reason: dnhData.dnh_reason || null,
+        dnh_date: dnhData.dnh_date || null,
+        dnh_recruiter: dnhData.dnh_recruiter || null,
+      })
+      .eq("id", candidateId);
 
-  if (error) {
-    return { success: false, error: error.message };
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in setCandidateDNHStatus:", err);
+    return { success: false, error: err.message || "An unexpected error occurred" };
   }
-
-  const { revalidatePath } = await import("next/cache");
-  revalidatePath("/");
-
-  return { success: true };
 }
 
 export async function addCandidateNote(
@@ -909,24 +926,29 @@ export async function addCandidateNote(
   authorName: string,
   activityType: string = "Note"
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const { error } = await supabase.from("activity_logs").insert({
-    candidate_id: candidateId,
-    activity_type: activityType,
-    notes: noteText,
-    author_name: authorName,
-    created_at: new Date().toISOString(),
-  });
+    const { error } = await supabase.from("activity_logs").insert({
+      candidate_id: candidateId,
+      activity_type: activityType,
+      notes: noteText,
+      author_name: authorName,
+      created_at: new Date().toISOString(),
+    });
 
-  if (error) {
-    return { success: false, error: error.message };
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in addCandidateNote:", err);
+    return { success: false, error: err.message || "An unexpected error occurred" };
   }
-
-  const { revalidatePath } = await import("next/cache");
-  revalidatePath("/");
-
-  return { success: true };
 }
 
 export async function updateCandidateProfile(
@@ -947,47 +969,52 @@ export async function updateCandidateProfile(
     linkedin_url?: string | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const cleanData: any = { ...updateData };
-  if (cleanData.linkedin_url) {
-    cleanData.linkedin_url = cleanData.linkedin_url.trim();
-  }
-  if (cleanData.email) {
-    cleanData.email = ["not provided", "not available", "n/a"].includes(cleanData.email.trim().toLowerCase()) ? null : cleanData.email.trim();
-  }
-  if (cleanData.phone) {
-    cleanData.phone = ["not provided", "not available", "n/a"].includes(cleanData.phone.trim().toLowerCase()) ? null : cleanData.phone.trim();
-  }
-  if (cleanData.zip_code) {
-    cleanData.zip_code = cleanData.zip_code.trim();
-  }
+    const cleanData: any = { ...updateData };
+    if (typeof cleanData.linkedin_url === 'string') {
+      cleanData.linkedin_url = cleanData.linkedin_url.trim();
+    }
+    if (typeof cleanData.email === 'string') {
+      cleanData.email = ["not provided", "not available", "n/a"].includes(cleanData.email.trim().toLowerCase()) ? null : cleanData.email.trim();
+    }
+    if (typeof cleanData.phone === 'string') {
+      cleanData.phone = ["not provided", "not available", "n/a"].includes(cleanData.phone.trim().toLowerCase()) ? null : cleanData.phone.trim();
+    }
+    if (typeof cleanData.zip_code === 'string') {
+      cleanData.zip_code = cleanData.zip_code.trim();
+    }
 
-  let { error } = await supabase
-    .from("candidates")
-    .update({ ...cleanData, updated_at: new Date().toISOString() })
-    .eq("id", candidateId);
-
-  // If column doesn't exist yet in the database schema, gracefully retry without new columns
-  if (error && (error.message?.includes("zip_code") || error.message?.includes("shift_preferences") || error.message?.includes("availability_days"))) {
-    delete cleanData.zip_code;
-    delete cleanData.shift_preferences;
-    delete cleanData.availability_days;
-    const retry = await supabase
+    let { error } = await supabase
       .from("candidates")
       .update({ ...cleanData, updated_at: new Date().toISOString() })
       .eq("id", candidateId);
-    error = retry.error;
+
+    // If column doesn't exist yet in the database schema, gracefully retry without new columns
+    if (error && (error.message?.includes("zip_code") || error.message?.includes("shift_preferences") || error.message?.includes("availability_days"))) {
+      delete cleanData.zip_code;
+      delete cleanData.shift_preferences;
+      delete cleanData.availability_days;
+      const retry = await supabase
+        .from("candidates")
+        .update({ ...cleanData, updated_at: new Date().toISOString() })
+        .eq("id", candidateId);
+      error = retry.error;
+    }
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in updateCandidateProfile:", err);
+    return { success: false, error: err.message || "An unexpected error occurred" };
   }
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  const { revalidatePath } = await import("next/cache");
-  revalidatePath("/");
-
-  return { success: true };
 }
 
 export async function updateDuplicateCandidateResume(
