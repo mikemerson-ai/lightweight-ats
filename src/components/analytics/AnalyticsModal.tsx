@@ -92,8 +92,34 @@ export function AnalyticsModal({ open, onClose, jobs, initialJobId }: AnalyticsM
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-white dark:bg-slate-900">
           {loading ? (
-            <div className="flex items-center justify-center h-48">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 dark:border-slate-100"></div>
+            <div className="space-y-6 animate-pulse">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-slate-50 dark:bg-slate-800 rounded-lg p-5 border border-slate-100 dark:border-slate-700 h-28">
+                    <div className="h-4 w-1/3 bg-slate-200 dark:bg-slate-700 rounded mb-4"></div>
+                    <div className="h-8 w-1/2 bg-slate-200 dark:bg-slate-700 rounded mb-2"></div>
+                    <div className="h-3 w-2/3 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 h-80 flex flex-col">
+                  <div className="h-5 w-1/4 bg-slate-200 dark:bg-slate-700 rounded mb-6"></div>
+                  <div className="flex-1 flex items-end gap-2 px-4">
+                    {[...Array(7)].map((_, i) => (
+                      <div key={i} className="w-full bg-slate-200 dark:bg-slate-700 rounded-t" style={{ height: `${Math.max(20, Math.random() * 100)}%` }}></div>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 h-80">
+                  <div className="h-5 w-1/3 bg-slate-200 dark:bg-slate-700 rounded mb-6"></div>
+                  <div className="space-y-4">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="h-10 w-full bg-slate-100 dark:bg-slate-800 rounded"></div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : error ? (
             <div className="p-4 rounded-md bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800">

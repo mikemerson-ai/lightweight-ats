@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   X,
   Sparkles,
@@ -178,10 +179,10 @@ export function AiOutreachModal({
         setTimeout(() => setLoggedSuccess(false), 3000);
         onActivityLogged?.();
       } else {
-        alert(res.error || "Failed to log outreach activity.");
+        toast.error(res.error || "Failed to log outreach activity.");
       }
     } catch (err: any) {
-      alert("Error: " + err.message);
+      toast.error("Error: " + err.message);
     } finally {
       setIsLogging(false);
     }

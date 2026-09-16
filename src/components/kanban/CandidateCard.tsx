@@ -88,8 +88,8 @@ export function CandidateCard({
       {...listeners}
       onClick={() => !isDragging && onSelect?.(candidate)}
       className={[
-        "shrink-0 rounded-md border bg-white p-2 shadow-sm cursor-pointer relative overflow-hidden group",
-        isDragging ? "ring-2 ring-secondary" : "cursor-grab active:cursor-grabbing hover:border-slate-300",
+        "shrink-0 rounded-md border bg-white p-2 shadow-sm cursor-pointer relative overflow-hidden group transition-all duration-200",
+        isDragging ? "ring-2 ring-secondary opacity-60 scale-105 shadow-xl" : "cursor-grab active:cursor-grabbing hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5",
       ].join(" ")}
     >
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${
@@ -102,6 +102,9 @@ export function CandidateCard({
           {candidate.first_name} {candidate.last_name}
         </span>
         <div className="flex items-center gap-1 shrink-0">
+          {candidate.temperature === 'hot' && <span className="text-xs leading-none" title="Hot Lead">🔥</span>}
+          {candidate.temperature === 'warm' && <span className="text-xs leading-none" title="Warm Lead">☀️</span>}
+          {candidate.temperature === 'cold' && <span className="text-xs leading-none" title="Cold Lead">❄️</span>}
           {candidate.resume_url && (
             <a
               href={candidate.resume_url}

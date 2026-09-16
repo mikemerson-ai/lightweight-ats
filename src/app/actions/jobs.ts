@@ -42,131 +42,165 @@ export async function getJobs(): Promise<Job[]> {
   return (data as Job[]) ?? [];
 }
 
-export async function createJob(formData: FormData): Promise<Job> {
+export async function getActiveJobs(): Promise<Job[]> {
   const supabase = await createClient();
-
-  const title = formData.get("title") as string;
-  const department = formData.get("department") as string;
-  const location = formData.get("location") as string;
-  const description = formData.get("description") as string;
-  const requirements = formData.get("requirements") as string;
-  const target_headcount_str = formData.get("target_headcount") as string;
-
-  if (!title || !department || !description || !requirements) {
-    throw new Error("Missing required fields: Title, Department, Description, and Requirements are mandatory.");
-  }
-
-  // Duplicate detection for createJob
-  const { data: existingJob, error: checkError } = await supabase
-    .from("jobs")
-    .select("id")
-    .ilike("title", title)
-    .limit(1);
-
-  if (existingJob && existingJob.length > 0) {
-    throw new Error("A job opening with this title already exists.");
-  }
-
-  const target_headcount = target_headcount_str ? parseInt(target_headcount_str, 10) : 1;
 
   const { data, error } = await supabase
     .from("jobs")
-    .insert({
-      title,
-      department,
-      location: location || "",
-      description,
-      requirements,
-      target_headcount,
-      status: "Active",
-    })
-    .select()
-    .single();
+    .select("*")
+    .eq("status", "Active")
+    .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data as Job;
+  return (data as Job[]) ?? [];
 }
 
-export async function updateJob(jobId: string, data: { title: string; department: string; target_headcount: number; description: string; requirements: string }): Promise<Job> {
-  const supabase = await createClient();
+export async function createJob(formData: FormData): Promise<{ success: boolean; data?: Job; error?: string }> {
+  try {
+    const supabase = await createClient();
 
-  const { data: existingJob, error: checkError } = await supabase
-    .from("jobs")
-    .select("id")
-    .ilike("title", data.title)
-    .neq("id", jobId)
-    .limit(1);
+    const title = (formData.get("title") as string)?.trim();
+    const department = (formData.get("department") as string)?.trim();
+    const location = (formData.get("location") as string)?.trim() || "";
+    const description = (formData.get("description") as string)?.trim();
+    const requirements = (formData.get("requirements") as string)?.trim();
+    const target_headcount_str = formData.get("target_headcount") as string;
 
-  if (existingJob && existingJob.length > 0) {
-    throw new Error("A job opening with this title already exists.");
+    if (!title || !department || !description || !requirements) {
+      return { success: false, error: "Missing required fields: Title, Department, Description, and Requirements are mandatory." };
+    }
+
+    // Duplicate detection for createJob
+    const { data: existingJob, error: checkError } = await supabase
+      .from("jobs")
+      .select("id")
+      .ilike("title", title)
+      .limit(1);
+
+    if (existingJob && existingJob.length > 0) {
+      return { success: false, error: "A job opening with this title already exists." };
+    }
+
+    const target_headcount = target_headcount_str ? parseInt(target_headcount_str, 10) : 1;
+
+    const { data, error } = await supabase
+      .from("jobs")
+      .insert({
+        title,
+        department,
+        location,
+        description,
+        requirements,
+        target_headcount,
+        status: "Active",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data as Job };
+  } catch (err: any) {
+    console.error("createJob error:", err);
+    return { success: false, error: err.message || "Failed to create job" };
   }
-
-  const { data: updatedData, error } = await supabase
-    .from("jobs")
-    .update(data)
-    .eq("id", jobId)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/");
-  return updatedData as Job;
 }
 
-export async function deleteJob(jobId: string, forceCascade: boolean = false): Promise<void> {
-  const supabase = await createClient();
+export async function updateJob(
+  jobId: string,
+  data: { title: string; department: string; target_headcount: number; description: string; requirements: string }
+): Promise<{ success: boolean; data?: Job; error?: string }> {
+  try {
+    const supabase = await createClient();
 
-  // Check if active candidates are assigned to the job.
-  const { data: candidates, error: candidateError } = await supabase
-    .from("candidates")
-    .select("id")
-    .eq("job_id", jobId)
-    .limit(1);
+    const { data: existingJob, error: checkError } = await supabase
+      .from("jobs")
+      .select("id")
+      .ilike("title", data.title)
+      .neq("id", jobId)
+      .limit(1);
 
-  if (candidateError) {
-    throw new Error(candidateError.message);
+    if (existingJob && existingJob.length > 0) {
+      return { success: false, error: "A job opening with this title already exists." };
+    }
+
+    const { data: updatedData, error } = await supabase
+      .from("jobs")
+      .update(data)
+      .eq("id", jobId)
+      .select()
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/");
+    return { success: true, data: updatedData as Job };
+  } catch (err: any) {
+    console.error("updateJob error:", err);
+    return { success: false, error: err.message || "Failed to update job" };
   }
+}
 
-  const hasCandidates = candidates && candidates.length > 0;
+export async function deleteJob(jobId: string, forceCascade: boolean = false): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
 
-  if (hasCandidates && !forceCascade) {
-    throw new Error("Cannot_Delete_Has_Candidates");
-  }
-
-  // If forceCascade is true, we must delete the associated candidates first manually if cascade constraints aren't set in the DB
-  if (hasCandidates && forceCascade) {
-    // Delete candidates manually to cascade
-    const { data: allCandidates } = await supabase
+    // Check if active candidates are assigned to the job.
+    const { data: candidates, error: candidateError } = await supabase
       .from("candidates")
       .select("id")
-      .eq("job_id", jobId);
+      .eq("job_id", jobId)
+      .limit(1);
 
-    if (allCandidates && allCandidates.length > 0) {
-      for (const candidate of allCandidates) {
-        await supabase.from("activity_logs").delete().eq("candidate_id", candidate.id);
-        await supabase.from("document_checklists").delete().eq("candidate_id", candidate.id);
-        await supabase.from("evaluations").delete().eq("candidate_id", candidate.id);
-        await supabase.from("candidates").delete().eq("id", candidate.id);
+    if (candidateError) {
+      return { success: false, error: candidateError.message };
+    }
+
+    const hasCandidates = candidates && candidates.length > 0;
+
+    if (hasCandidates && !forceCascade) {
+      return { success: false, error: "Cannot_Delete_Has_Candidates" };
+    }
+
+    // If forceCascade is true, we must delete the associated candidates first manually if cascade constraints aren't set in the DB
+    if (hasCandidates && forceCascade) {
+      const { data: allCandidates } = await supabase
+        .from("candidates")
+        .select("id")
+        .eq("job_id", jobId);
+
+      if (allCandidates && allCandidates.length > 0) {
+        for (const candidate of allCandidates) {
+          await supabase.from("activity_logs").delete().eq("candidate_id", candidate.id);
+          await supabase.from("document_checklists").delete().eq("candidate_id", candidate.id);
+          await supabase.from("evaluations").delete().eq("candidate_id", candidate.id);
+          await supabase.from("candidates").delete().eq("id", candidate.id);
+        }
       }
     }
+
+    const { error } = await supabase
+      .from("jobs")
+      .delete()
+      .eq("id", jobId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/");
+    return { success: true };
+  } catch (err: any) {
+    console.error("deleteJob error:", err);
+    return { success: false, error: err.message || "Failed to delete job" };
   }
-
-  const { error } = await supabase
-    .from("jobs")
-    .delete()
-    .eq("id", jobId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/");
 }
 
 export async function toggleJobStatus(

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { updateJob, Job } from "@/app/actions/jobs";
+import { Job } from "@/app/actions/jobs";
+import { createClient } from "@/lib/supabase/client";
 
 interface EditJobModalProps {
   open: boolean;
@@ -41,7 +42,7 @@ export function EditJobModal({
   }
 
   async function handleSubmit() {
-    if (!title || !department || !description || !requirements || !targetHeadcount) {
+    if (!title.trim() || !department.trim() || !description.trim() || !requirements.trim() || !targetHeadcount) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -49,13 +50,42 @@ export function EditJobModal({
     setSaving(true);
     setError("");
     try {
-      await updateJob(job!.id, {
-        title,
-        department,
-        description,
-        requirements,
-        target_headcount: parseInt(targetHeadcount, 10),
-      });
+      const supabase = createClient();
+
+      const { data: existingJob, error: checkError } = await supabase
+        .from("jobs")
+        .select("id")
+        .ilike("title", title.trim())
+        .neq("id", job!.id)
+        .limit(1);
+
+      if (checkError) {
+        console.error(checkError);
+      }
+
+      if (existingJob && existingJob.length > 0) {
+        setError("A job opening with this title already exists.");
+        setSaving(false);
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("jobs")
+        .update({
+          title: title.trim(),
+          department: department.trim(),
+          description: description.trim(),
+          requirements: requirements.trim(),
+          target_headcount: parseInt(targetHeadcount, 10) || 1,
+        })
+        .eq("id", job!.id);
+
+      if (updateError) {
+        setError(updateError.message || "Failed to update job.");
+        setSaving(false);
+        return;
+      }
+
       onJobUpdated();
       onClose();
     } catch (err: any) {

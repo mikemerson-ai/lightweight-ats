@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import {
   X,
   Upload,
@@ -196,12 +197,12 @@ export function BatchResumeUploadModal({
   async function handleStartBatchParsing() {
     const targetJobId = selectedJobId || defaultJobId;
     if (!targetJobId) {
-      alert("Please select a target job requisition before parsing.");
+      toast.error("Please select a target job requisition before parsing.");
       return;
     }
 
     if (!currentJob?.description || currentJob.description.trim().length === 0) {
-      alert("Selected job requisition is missing a job description. A valid job description is required for AI fit scoring.");
+      toast.error("Selected job requisition is missing a job description. A valid job description is required for AI fit scoring.");
       return;
     }
 
@@ -344,7 +345,7 @@ export function BatchResumeUploadModal({
     );
 
     if (selectedItems.length === 0) {
-      alert("No candidates selected for import.");
+      toast.error("No candidates selected for import.");
       return;
     }
 
@@ -444,7 +445,7 @@ export function BatchResumeUploadModal({
         router.refresh();
       }
     } catch (err: any) {
-      alert("Failed to import candidates: " + err.message);
+      toast.error("Failed to import candidates: " + err.message);
     } finally {
       setIsImporting(false);
       setImportStatusText("");

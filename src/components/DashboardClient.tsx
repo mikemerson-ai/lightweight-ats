@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Job, deleteJob } from "@/app/actions/jobs";
+import { Job } from "@/app/actions/jobs";
 import { createClient } from "@/lib/supabase/client";
 import type { Candidate } from "@/app/actions/candidates";
 import { SearchBar } from "./search/SearchBar";
@@ -39,6 +39,7 @@ export function DashboardClient({
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "inbound" | "outbound">("all");
+  const [temperatureFilter, setTemperatureFilter] = useState<"all" | "hot" | "warm" | "cold" | "unset">("all");
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [batchUploadOpen, setBatchUploadOpen] = useState(false);
@@ -139,18 +140,58 @@ export function DashboardClient({
     setDeleteError("");
     
     try {
-      await deleteJob(selectedJobId, forceCascade);
+      const supabase = createClient();
+      // Check if active candidates are assigned to the job
+      const { data: candidates, error: candidateError } = await supabase
+        .from("candidates")
+        .select("id")
+        .eq("job_id", selectedJobId)
+        .limit(1);
+
+      if (candidateError) {
+        setDeleteError(candidateError.message);
+        return;
+      }
+
+      const hasCandidates = candidates && candidates.length > 0;
+      if (hasCandidates && !forceCascade) {
+        setDeleteCascadePrompt(true);
+        return;
+      }
+
+      if (hasCandidates && forceCascade) {
+        const { data: allCandidates } = await supabase
+          .from("candidates")
+          .select("id")
+          .eq("job_id", selectedJobId);
+
+        if (allCandidates && allCandidates.length > 0) {
+          for (const candidate of allCandidates) {
+            await supabase.from("activity_logs").delete().eq("candidate_id", candidate.id);
+            await supabase.from("document_checklists").delete().eq("candidate_id", candidate.id);
+            await supabase.from("evaluations").delete().eq("candidate_id", candidate.id);
+            await supabase.from("candidates").delete().eq("id", candidate.id);
+          }
+        }
+      }
+
+      const { error: deleteError } = await supabase
+        .from("jobs")
+        .delete()
+        .eq("id", selectedJobId);
+
+      if (deleteError) {
+        setDeleteError(deleteError.message);
+        return;
+      }
+
       const updatedJobs = await fetchUpdatedJobs();
       setJobs(updatedJobs);
       changeSelectedJob(updatedJobs.length > 0 ? updatedJobs[0].id : null);
       setDeleteConfirmOpen(false);
       setDeleteCascadePrompt(false);
     } catch (err: any) {
-      if (err.message === "Cannot_Delete_Has_Candidates") {
-        setDeleteCascadePrompt(true);
-      } else {
-        setDeleteError(err.message || "Failed to delete job.");
-      }
+      setDeleteError(err.message || "Failed to delete job.");
     } finally {
       setIsDeleting(false);
     }
@@ -343,6 +384,20 @@ export function DashboardClient({
                   <option value="inbound">Direct Applicants</option>
                   <option value="outbound">Outbound Sourced</option>
                 </select>
+
+                <select
+                  value={temperatureFilter}
+                  onChange={(e) =>
+                    setTemperatureFilter(e.target.value as any)
+                  }
+                  className="w-[150px] rounded-md bg-white border border-slate-300 px-3 py-2 text-sm text-[#0F2C59]"
+                >
+                  <option value="all">All Temps</option>
+                  <option value="hot">🔥 Hot</option>
+                  <option value="warm">☀️ Warm</option>
+                  <option value="cold">❄️ Cold</option>
+                  <option value="unset">Unassigned</option>
+                </select>
                 
                 <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
               </>
@@ -376,6 +431,7 @@ export function DashboardClient({
               jobId={selectedJobId}
               searchQuery={searchQuery}
               sourceFilter={sourceFilter}
+              temperatureFilter={temperatureFilter}
               viewMode={viewMode}
             />
           ) : (

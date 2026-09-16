@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { CalendarClock, Mail, Phone, Star, X, ExternalLink, AlertTriangle, ChevronDown, ChevronUp, Link as LinkIcon, MapPin, Edit, RefreshCw, FileText, Upload, Check } from "lucide-react";
 import {
   type Candidate,
@@ -9,6 +10,7 @@ import {
   setCandidateDNHStatus,
   addCandidateNote,
   updateCandidateProfile,
+  updateCandidateTemperature,
   reEvaluateCandidateFit,
   uploadCandidateResume,
   getCandidateById,
@@ -16,7 +18,7 @@ import {
 } from "@/app/actions/candidates";
 import { getGroupHomes } from "@/app/actions/groupHomes";
 import type { GroupHome } from "@/types/groupHomes";
-import { SHIFT_OPTIONS } from "@/types/groupHomes";
+import { SHIFT_OPTIONS, AVAILABILITY_DAYS_OPTIONS } from "@/types/groupHomes";
 import { DspCommuteBreakdownWidget } from "@/components/candidates/DspCommuteBreakdownWidget";
 import { normalizeZipCode } from "@/lib/geo/commute";
 import {
@@ -42,7 +44,8 @@ import type { Evaluation } from "@/types/evaluations";
 import { EvaluationModal } from "@/components/modals/EvaluationModal";
 import { ScorecardViewerModal } from "@/components/modals/ScorecardViewerModal";
 import { AiOutreachModal } from "@/components/modals/AiOutreachModal";
-import { Trash2, Sparkles } from "lucide-react";
+import { Trash2, Sparkles, Briefcase } from "lucide-react";
+import JobTransferModal from "@/components/modals/JobTransferModal";
 
 const STAGE_TITLES: Record<string, string> = {
   new_application: "New Application",
@@ -116,7 +119,7 @@ function DocumentCard({ doc, onRefresh, activeRecruiterName }: { doc: CandidateD
 
   const handleSave = async () => {
     if (doc.requires_expiration && (status === "Submitted" || status === "Verified") && !dateExpired) {
-      alert("An expiration date is required for this document before it can be marked as Submitted or Verified.");
+      toast.error("An expiration date is required for this document before it can be marked as Submitted or Verified.");
       return;
     }
 
@@ -132,7 +135,7 @@ function DocumentCard({ doc, onRefresh, activeRecruiterName }: { doc: CandidateD
       setIsExpanded(false);
       onRefresh();
     } catch (err: any) {
-      alert(err.message || "Failed to update document");
+      toast.error(err.message || "Failed to update document");
     } finally {
       setIsSaving(false);
     }
@@ -302,7 +305,7 @@ export function CandidateDetailDrawer({
       setLocalCandidate(updated);
       onCandidateUpdated?.(updated);
     } else {
-      alert("Failed to update ZIP code: " + res.error);
+      toast.error("Failed to update ZIP code: " + res.error);
     }
   }
 
@@ -321,7 +324,7 @@ export function CandidateDetailDrawer({
       setLocalCandidate(updated);
       onCandidateUpdated?.(updated);
     } else {
-      alert("Failed to update shift preferences: " + res.error);
+      toast.error("Failed to update shift preferences: " + res.error);
     }
   }
 
@@ -331,7 +334,6 @@ export function CandidateDetailDrawer({
   const [activeTab, setActiveTab] = useState<
     "compliance" | "activity" | "evaluations" | "experience"
   >("activity");
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
   const [showScorecardModal, setShowScorecardModal] = useState(false);
@@ -342,6 +344,8 @@ export function CandidateDetailDrawer({
   const [isAddingDoc, setIsAddingDoc] = useState(false);
   
   const [showDNHModal, setShowDNHModal] = useState(false);
+  const [showJobTransferModal, setShowJobTransferModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [dnhReason, setDnhReason] = useState("");
   const [dnhDate, setDnhDate] = useState("");
   const [dnhRecruiter, setDnhRecruiter] = useState("");
@@ -362,6 +366,7 @@ export function CandidateDetailDrawer({
     address: "",
     zip_code: "",
     shift_preferences: [] as string[],
+    availability_days: [] as string[],
     primary_skills: "",
     years_of_experience: "" as string | number,
     date_applied: "",
@@ -383,6 +388,7 @@ export function CandidateDetailDrawer({
         linkedin_url: editForm.linkedin_url || undefined,
         zip_code: editForm.zip_code?.trim() || null,
         shift_preferences: editForm.shift_preferences || [],
+        availability_days: editForm.availability_days || [],
       });
       const updated = {
         ...activeCandidate,
@@ -390,12 +396,13 @@ export function CandidateDetailDrawer({
         years_of_experience: editForm.years_of_experience ? Number(editForm.years_of_experience) : null,
         zip_code: editForm.zip_code?.trim() || null,
         shift_preferences: editForm.shift_preferences || [],
+        availability_days: editForm.availability_days || [],
       } as Candidate;
       setLocalCandidate(updated);
       onCandidateUpdated?.(updated);
       setShowEditModal(false);
     } catch (err: any) {
-      alert("Failed to update profile: " + err.message);
+      toast.error("Failed to update profile: " + err.message);
     } finally {
       setIsSavingProfile(false);
     }
@@ -414,13 +421,13 @@ export function CandidateDetailDrawer({
         onCandidateUpdated?.(res.candidate);
         const updatedActivity = await getCandidateActivity(activeCandidate.id);
         setActivity(updatedActivity);
-        alert("Resume uploaded successfully!");
+        toast.success("Resume uploaded successfully!");
       } else {
-        alert(res.error || "Failed to upload resume.");
+        toast.error(res.error || "Failed to upload resume.");
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Failed to upload resume.");
+      toast.error(err.message || "Failed to upload resume.");
     } finally {
       setIsUploadingResume(false);
     }
@@ -441,7 +448,7 @@ export function CandidateDetailDrawer({
       const updatedActivity = await getCandidateActivity(candidate.id);
       setActivity(updatedActivity);
     } catch (err: any) {
-      alert("Failed to add note: " + err.message);
+      toast.error("Failed to add note: " + err.message);
     } finally {
       setIsSubmittingNote(false);
     }
@@ -464,7 +471,7 @@ export function CandidateDetailDrawer({
       await refreshDocuments();
     } catch (err) {
       console.error("Failed to update document status", err);
-      alert("Failed to update document status");
+      toast.error("Failed to update document status");
     }
   }
 
@@ -492,7 +499,7 @@ export function CandidateDetailDrawer({
       await refreshDocuments();
     } catch (err) {
       console.error("Failed to add document requirement", err);
-      alert("Failed to add document requirement");
+      toast.error("Failed to add document requirement");
     } finally {
       setIsAddingDoc(false);
     }
@@ -509,7 +516,7 @@ export function CandidateDetailDrawer({
       window.location.reload();
     } catch (err) {
       console.error("Failed to delete candidate", err);
-      alert("Failed to delete candidate");
+      toast.error("Failed to delete candidate");
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -550,6 +557,7 @@ export function CandidateDetailDrawer({
         address: candidate.address || "",
         zip_code: candidate.zip_code || "",
         shift_preferences: candidate.shift_preferences || [],
+        availability_days: candidate.availability_days || [],
         primary_skills: candidate.primary_skills || "",
         years_of_experience: candidate.years_of_experience || "",
         date_applied: candidate.date_applied ? candidate.date_applied.split("T")[0] : "",
@@ -561,7 +569,7 @@ export function CandidateDetailDrawer({
 
   async function handleSetDNH() {
     if (!candidate || !dnhDate || !dnhRecruiter || !dnhReason) {
-      alert("Please fill in all required fields.");
+      toast.error("Please fill in all required fields.");
       return;
     }
     setIsSavingDnh(true);
@@ -575,7 +583,7 @@ export function CandidateDetailDrawer({
       setShowDNHModal(false);
       window.location.reload();
     } catch (err: any) {
-      alert("Failed to flag candidate.");
+      toast.error("Failed to flag candidate.");
     } finally {
       setIsSavingDnh(false);
     }
@@ -591,7 +599,7 @@ export function CandidateDetailDrawer({
       });
       window.location.reload();
     } catch (err: any) {
-      alert("Failed to remove flag.");
+      toast.error("Failed to remove flag.");
     } finally {
       setIsSavingDnh(false);
     }
@@ -608,13 +616,40 @@ export function CandidateDetailDrawer({
         const updatedActivity = await getCandidateActivity(activeCandidate.id);
         setActivity(updatedActivity);
       } else {
-        alert(res.error || "Failed to re-evaluate candidate fit.");
+        toast.error(res.error || "Failed to re-evaluate candidate fit.");
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "An unexpected error occurred during re-evaluation.");
+      toast.error(err.message || "An unexpected error occurred during re-evaluation.");
     } finally {
       setIsReEvaluating(false);
+    }
+  }
+
+  async function handleTemperatureChange(temp: 'hot' | 'warm' | 'cold' | null) {
+    if (!activeCandidate?.id) return;
+    
+    // Optimistic update
+    const previousTemp = activeCandidate.temperature;
+    const newTemp = previousTemp === temp ? null : temp;
+    
+    const updated = { ...activeCandidate, temperature: newTemp };
+    setLocalCandidate(updated);
+    
+    try {
+      const res = await updateCandidateTemperature(activeCandidate.id, newTemp, activeRecruiter?.name);
+      if (res.success) {
+        onCandidateUpdated?.(updated);
+        const updatedActivity = await getCandidateActivity(activeCandidate.id);
+        setActivity(updatedActivity);
+      } else {
+        // Revert on failure
+        setLocalCandidate({ ...activeCandidate, temperature: previousTemp });
+        toast.error(res.error || "Failed to update candidate temperature.");
+      }
+    } catch (err: any) {
+      setLocalCandidate({ ...activeCandidate, temperature: previousTemp });
+      toast.error(err.message || "An unexpected error occurred.");
     }
   }
 
@@ -656,6 +691,7 @@ export function CandidateDetailDrawer({
                         address: activeCandidate.address || "",
                         zip_code: activeCandidate.zip_code || "",
                         shift_preferences: activeCandidate.shift_preferences || [],
+                        availability_days: activeCandidate.availability_days || [],
                         primary_skills: activeCandidate.primary_skills || "",
                         years_of_experience: activeCandidate.years_of_experience ?? "",
                         date_applied: activeCandidate.date_applied?.split("T")[0] || "",
@@ -668,6 +704,15 @@ export function CandidateDetailDrawer({
                 >
                   <Edit className="h-3.5 w-3.5" />
                   Edit
+                </button>
+                <button
+                  type="button"
+                  aria-label="Transfer candidate"
+                  className="flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/20 transition-colors"
+                  onClick={() => setShowJobTransferModal(true)}
+                >
+                  <Briefcase className="h-3.5 w-3.5" />
+                  Transfer
                 </button>
                 {!candidate.dnh_flag && (
                   <button
@@ -723,6 +768,27 @@ export function CandidateDetailDrawer({
                 </div>
               </div>
               
+              <div className="flex bg-white/10 rounded-full p-0.5 border border-white/20">
+                <button
+                  onClick={() => handleTemperatureChange('hot')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors flex items-center gap-1 ${activeCandidate?.temperature === 'hot' ? 'bg-rose-500 text-white shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                >
+                  🔥 Hot
+                </button>
+                <button
+                  onClick={() => handleTemperatureChange('warm')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors flex items-center gap-1 ${activeCandidate?.temperature === 'warm' ? 'bg-amber-500 text-white shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                >
+                  ☀️ Warm
+                </button>
+                <button
+                  onClick={() => handleTemperatureChange('cold')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors flex items-center gap-1 ${activeCandidate?.temperature === 'cold' ? 'bg-sky-500 text-white shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                >
+                  ❄️ Cold
+                </button>
+              </div>
+
               {candidate.pipeline_stage !== "disqualified" && candidate.pipeline_stage !== "hired" && (
                 <>
                   <button 
@@ -986,6 +1052,38 @@ export function CandidateDetailDrawer({
                         })}
                       </div>
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Availability Days</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {AVAILABILITY_DAYS_OPTIONS.map((day) => {
+                          const isSelected = editForm.availability_days?.includes(day.id);
+                          return (
+                            <button
+                              key={day.id}
+                              type="button"
+                              onClick={() => {
+                                const current = editForm.availability_days || [];
+                                setEditForm({
+                                  ...editForm,
+                                  availability_days: current.includes(day.id)
+                                    ? current.filter((d) => d !== day.id)
+                                    : [...current, day.id],
+                                });
+                              }}
+                              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold border transition cursor-pointer ${
+                                isSelected
+                                  ? "bg-sky-600 text-white border-sky-600 shadow-xs"
+                                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              <span>{day.label}</span>
+                              {isSelected && <Check className="h-3 w-3 ml-0.5 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">LinkedIn Profile URL</label>
                       <input type="url" value={editForm.linkedin_url} onChange={(e) => setEditForm({...editForm, linkedin_url: e.target.value})} className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="https://linkedin.com/in/username" />
@@ -1150,18 +1248,27 @@ export function CandidateDetailDrawer({
                     <RefreshCw className={`h-3 w-3 text-slate-500 ${isReEvaluating ? "animate-spin text-secondary" : ""}`} />
                     <span>{isReEvaluating ? "Evaluating..." : "Re-evaluate"}</span>
                   </button>
+
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowScorecardModal(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/30 bg-secondary/10 px-2.5 py-1 text-xs font-semibold text-secondary hover:bg-secondary/20 transition shadow-xs"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {evaluations.some((ev) => ev.reviewer_name?.includes("AI") || ev.notes?.includes("Hard Gate"))
-                    ? "View Deep Scorecard"
-                    : "Generate AI Scorecard"}
-                </button>
+                <div className="flex items-center gap-2">
+                  {!activeCandidate?.ai_summary && activeCandidate?.resume_text && (
+                    <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
+                      <AlertTriangle className="h-3 w-3" />
+                      Outdated Scorecard
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowScorecardModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/30 bg-secondary/10 px-2.5 py-1 text-xs font-semibold text-secondary hover:bg-secondary/20 transition shadow-xs"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {evaluations.some((ev) => ev.reviewer_name?.includes("AI") || ev.notes?.includes("Hard Gate"))
+                      ? "View Deep Scorecard"
+                      : "Generate AI Scorecard"}
+                  </button>
+                </div>
               </div>
               
               {activeCandidate?.fit_rating != null && (
@@ -1607,6 +1714,21 @@ export function CandidateDetailDrawer({
           setActivity(acts);
         }}
       />
+
+
+      {showJobTransferModal && activeCandidate && (
+        <JobTransferModal
+          isOpen={showJobTransferModal}
+          onClose={() => setShowJobTransferModal(false)}
+          candidate={activeCandidate}
+          onTransferComplete={(updatedCand) => {
+            if (onCandidateUpdated) {
+              onCandidateUpdated(updatedCand);
+            }
+            setShowJobTransferModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

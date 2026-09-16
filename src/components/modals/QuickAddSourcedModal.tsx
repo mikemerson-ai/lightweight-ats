@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Loader2, Upload, X, Check } from "lucide-react";
 import { quickAddSourcedCandidate, checkCandidateDuplicate, updateDuplicateCandidateResume, uploadCandidateResume, type Candidate } from "@/app/actions/candidates";
 import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
@@ -253,7 +254,7 @@ export function QuickAddSourcedModal({
       
       onCandidateAdded?.(finalCandidate);
       router.refresh();
-      window.alert("Candidate resume and evaluation updated successfully");
+      toast.success("Candidate resume and evaluation updated successfully");
       reset();
       onClose();
     } catch (err: any) {
@@ -319,7 +320,7 @@ export function QuickAddSourcedModal({
 
       onCandidateAdded?.(finalCandidate);
       router.refresh();
-      window.alert("Candidate successfully added");
+      toast.success("Candidate successfully added");
       reset();
       onClose();
     } catch (err: any) {

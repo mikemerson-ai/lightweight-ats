@@ -22,7 +22,7 @@ import {
 import type { Candidate } from "@/app/actions/candidates";
 import { getDspCandidates } from "@/app/actions/candidates";
 import type { GroupHome } from "@/types/groupHomes";
-import { SHIFT_OPTIONS, type ShiftPreference } from "@/types/groupHomes";
+import { SHIFT_OPTIONS, AVAILABILITY_DAYS_OPTIONS, type ShiftPreference } from "@/types/groupHomes";
 import { getGroupHomes } from "@/app/actions/groupHomes";
 import {
   calculateDistanceMiles,
@@ -60,7 +60,9 @@ export function DspLeadMatchingView() {
   const [selectedHomeId, setSelectedHomeId] = useState<string>("all");
   const [selectedRadius, setSelectedRadius] = useState<number | "any">(10);
   const [selectedShifts, setSelectedShifts] = useState<ShiftPreference[]>([]);
+  const [selectedAvailabilityDays, setSelectedAvailabilityDays] = useState<string[]>([]);
   const [selectedStage, setSelectedStage] = useState<string>("all");
+  const [selectedTemperature, setSelectedTemperature] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Sorting
@@ -161,6 +163,15 @@ export function DspLeadMatchingView() {
         return false;
       }
 
+      // Temperature filter
+      if (selectedTemperature !== "all") {
+        if (selectedTemperature === "unset") {
+          if (c.temperature) return false;
+        } else {
+          if (c.temperature !== selectedTemperature) return false;
+        }
+      }
+
       // Radius filter
       if (selectedRadius !== "any") {
         if (item.distanceMiles === null) return false;
@@ -171,6 +182,13 @@ export function DspLeadMatchingView() {
       if (selectedShifts.length > 0) {
         const candidateShifts = c.shift_preferences || [];
         const hasMatch = selectedShifts.some((s) => candidateShifts.includes(s));
+        if (!hasMatch) return false;
+      }
+
+      // Availability Days filter
+      if (selectedAvailabilityDays.length > 0) {
+        const candidateDays = c.availability_days || [];
+        const hasMatch = selectedAvailabilityDays.some((d) => candidateDays.includes(d));
         if (!hasMatch) return false;
       }
 
@@ -198,7 +216,7 @@ export function DspLeadMatchingView() {
 
       return true;
     });
-  }, [enrichedCandidates, selectedStage, selectedRadius, selectedShifts, searchQuery]);
+  }, [enrichedCandidates, selectedStage, selectedTemperature, selectedRadius, selectedShifts, selectedAvailabilityDays, searchQuery]);
 
   // Sort candidates
   const sortedCandidates = useMemo(() => {
@@ -284,11 +302,17 @@ export function DspLeadMatchingView() {
     setSearchQuery("");
   }
 
-  function handleShiftToggle(shift: ShiftPreference) {
+  const handleShiftToggle = (shift: ShiftPreference) => {
     setSelectedShifts((prev) =>
       prev.includes(shift) ? prev.filter((s) => s !== shift) : [...prev, shift]
     );
-  }
+  };
+
+  const handleAvailabilityDayToggle = (day: string) => {
+    setSelectedAvailabilityDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
 
   function toggleSort(field: "distance" | "commute" | "name" | "recent") {
     if (sortBy === field) {
@@ -598,6 +622,30 @@ export function DspLeadMatchingView() {
             })}
           </div>
 
+          {/* Availability Days Pills */}
+          <div className="flex flex-wrap items-center gap-2 border-l border-slate-200 pl-3">
+            <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 mr-1">
+              Days:
+            </span>
+            {AVAILABILITY_DAYS_OPTIONS.map((day) => {
+              const isSelected = selectedAvailabilityDays.includes(day.id);
+              return (
+                <button
+                  key={day.id}
+                  type="button"
+                  onClick={() => handleAvailabilityDayToggle(day.id)}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition cursor-pointer border shadow-2xs ${
+                    isSelected
+                      ? "bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-600/20"
+                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  <span>{day.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Quick Radius Pills */}
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <span className="font-semibold text-slate-600 mr-1">Radius:</span>
@@ -618,6 +666,21 @@ export function DspLeadMatchingView() {
                 </button>
               );
             })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-l border-slate-200 pl-3">
+            <span className="text-xs font-semibold text-slate-600">Temp:</span>
+            <select
+              value={selectedTemperature}
+              onChange={(e) => setSelectedTemperature(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 shadow-2xs"
+            >
+              <option value="all">All Temps</option>
+              <option value="hot">🔥 Hot</option>
+              <option value="warm">☀️ Warm</option>
+              <option value="cold">❄️ Cold</option>
+              <option value="unset">Unassigned</option>
+            </select>
           </div>
         </div>
 
@@ -708,7 +771,7 @@ export function DspLeadMatchingView() {
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </th>
-                <th className="py-3 px-4">Shift Preferences</th>
+                <th className="py-3 px-4">Shifts & Days</th>
                 <th className="py-3 px-4 text-right">Quick Action</th>
               </tr>
             </thead>
@@ -749,6 +812,7 @@ export function DspLeadMatchingView() {
                   };
                   const proxBadge = getProximityBadge(item.distanceMiles);
                   const shifts = candidate.shift_preferences || [];
+                  const days = candidate.availability_days || [];
                   const initials = `${(candidate.first_name || "")[0] || ""}${(candidate.last_name || "")[0] || ""}`.toUpperCase();
 
                   return (
@@ -764,8 +828,11 @@ export function DspLeadMatchingView() {
                             {initials || "C"}
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900 group-hover:text-sky-600 transition-colors">
+                            <div className="font-bold text-slate-900 group-hover:text-sky-600 transition-colors flex items-center gap-1.5">
                               {candidate.first_name} {candidate.last_name}
+                              {candidate.temperature === 'hot' && <span className="text-xs" title="Hot Lead">🔥</span>}
+                              {candidate.temperature === 'warm' && <span className="text-xs" title="Warm Lead">☀️</span>}
+                              {candidate.temperature === 'cold' && <span className="text-xs" title="Cold Lead">❄️</span>}
                             </div>
                             <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                               {candidate.phone && (
@@ -856,37 +923,54 @@ export function DspLeadMatchingView() {
                         )}
                       </td>
 
-                      {/* Shift Preferences */}
+                      {/* Shifts & Days Preferences */}
                       <td className="py-3 px-4">
-                        {shifts.length === 0 ? (
+                        {shifts.length === 0 && days.length === 0 ? (
                           <span className="text-slate-400 text-[11px] italic">Not specified</span>
                         ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {shifts.map((s) => {
-                              const isDays = s === "Days";
-                              const isEvenings = s === "Evenings";
-                              const isNights = s === "Nights";
+                          <div className="flex flex-col gap-1.5">
+                            {shifts.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {shifts.map((s) => {
+                                  const isDays = s === "Days";
+                                  const isEvenings = s === "Evenings";
+                                  const isNights = s === "Nights";
 
-                              const color = isDays
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : isEvenings
-                                ? "bg-amber-50 text-amber-700 border-amber-200"
-                                : isNights
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                : "bg-slate-50 text-slate-700 border-slate-200";
+                                  const color = isDays
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : isEvenings
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : isNights
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                    : "bg-slate-50 text-slate-700 border-slate-200";
 
-                              const icon = isDays ? "☀️" : isEvenings ? "🌆" : isNights ? "🌙" : "•";
+                                  const icon = isDays ? "☀️" : isEvenings ? "🌆" : isNights ? "🌙" : "•";
 
-                              return (
-                                <span
-                                  key={s}
-                                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${color}`}
-                                >
-                                  <span>{icon}</span>
-                                  <span>{s}</span>
-                                </span>
-                              );
-                            })}
+                                  return (
+                                    <span
+                                      key={s}
+                                      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${color}`}
+                                    >
+                                      <span>{icon}</span>
+                                      <span>{s}</span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {days.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {days.map((d) => (
+                                  <span
+                                    key={d}
+                                    className="inline-flex items-center justify-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600"
+                                    title={`Available on ${d}`}
+                                  >
+                                    {d}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>

@@ -50,6 +50,7 @@ export interface QuickAddSourcedCandidateInput {
   address?: string;
   zip_code?: string;
   shift_preferences?: string[];
+  availability_days?: string[];
   resume_text?: string | null;
   resume_url?: string | null;
   resume_storage_path?: string | null;
@@ -61,6 +62,7 @@ export interface Candidate {
   id: string;
   first_name: string;
   last_name: string;
+  temperature?: 'hot' | 'warm' | 'cold' | null;
   email: string;
   phone: string;
   primary_skills: string;
@@ -91,6 +93,7 @@ export interface Candidate {
   address?: string;
   zip_code?: string | null;
   shift_preferences?: string[];
+  availability_days?: string[];
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
   evaluations?: Evaluation[];
 }
@@ -930,6 +933,7 @@ export async function updateCandidateProfile(
     address?: string;
     zip_code?: string | null;
     shift_preferences?: string[];
+    availability_days?: string[];
     primary_skills?: string;
     years_of_experience?: number | null;
     date_applied?: string;
@@ -959,9 +963,10 @@ export async function updateCandidateProfile(
     .eq("id", candidateId);
 
   // If column doesn't exist yet in the database schema, gracefully retry without new columns
-  if (error && (error.message?.includes("zip_code") || error.message?.includes("shift_preferences"))) {
+  if (error && (error.message?.includes("zip_code") || error.message?.includes("shift_preferences") || error.message?.includes("availability_days"))) {
     delete cleanData.zip_code;
     delete cleanData.shift_preferences;
+    delete cleanData.availability_days;
     const retry = await supabase
       .from("candidates")
       .update({ ...cleanData, updated_at: new Date().toISOString() })
@@ -1423,4 +1428,96 @@ export async function getDspCandidates(): Promise<Candidate[]> {
     console.error("Error in getDspCandidates:", err);
     return [];
   }
+}
+export async function updateCandidateTemperature(
+  candidateId: string,
+  temperature: 'hot' | 'warm' | 'cold' | null,
+  recruiterName?: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('candidates')
+    .update({ temperature })
+    .eq('id', candidateId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const tempStr = temperature ? temperature.toUpperCase() : 'UNASSIGNED';
+  const notes = `Updated lead temperature to ${tempStr}`;
+
+  await supabase.from('activity_logs').insert({
+    candidate_id: candidateId,
+    activity_type: 'Temperature Update',
+    notes,
+    author_name: recruiterName || 'Recruiter',
+  });
+
+  revalidatePath('/');
+  return { success: true };
+}
+
+export async function transferCandidateJob(
+  candidateId: string,
+  targetJobId: string,
+  targetStage: string,
+  recruiterName?: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  // 1. Get the target job to log its title
+  const { data: targetJob, error: jobError } = await supabase
+    .from('jobs')
+    .select('title')
+    .eq('id', targetJobId)
+    .single();
+
+  if (jobError) {
+    return { success: false, error: "Target job not found" };
+  }
+
+  // 2. Get the candidate's current job to log it
+  const { data: candidate, error: candidateError } = await supabase
+    .from('candidates')
+    .select('job_id, jobs(title)')
+    .eq('id', candidateId)
+    .single();
+
+  if (candidateError) {
+    return { success: false, error: "Candidate not found" };
+  }
+
+  const candidateJobs = candidate.jobs as any;
+  const oldJobTitle = (Array.isArray(candidateJobs) ? candidateJobs[0]?.title : candidateJobs?.title) || "Unknown Job";
+
+  // 3. Update the candidate
+  // We set ai_summary and sub_scores to null so that they are re-evaluated against the new job
+  const { error: updateError } = await supabase
+    .from('candidates')
+    .update({ 
+      job_id: targetJobId, 
+      pipeline_stage: targetStage,
+      ai_summary: null,
+      sub_scores: null
+    })
+    .eq('id', candidateId);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  // 4. Log the transfer
+  const notes = `Transferred from ${oldJobTitle} to ${targetJob.title}. Pipeline stage set to ${targetStage}.`;
+  
+  await supabase.from('activity_logs').insert({
+    candidate_id: candidateId,
+    activity_type: 'Job Transfer',
+    notes,
+    author_name: recruiterName || 'Recruiter',
+  });
+
+  revalidatePath('/');
+  return { success: true };
 }

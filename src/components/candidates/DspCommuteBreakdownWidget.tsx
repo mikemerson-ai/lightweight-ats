@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Car, Clock, MapPin, ChevronDown, ChevronUp, Check, AlertCircle, Edit2 } from "lucide-react";
 import type { Candidate } from "@/app/actions/candidates";
 import type { GroupHome } from "@/types/groupHomes";
@@ -38,7 +39,7 @@ export function DspCommuteBreakdownWidget({
     if (e) e.preventDefault();
     const clean = normalizeZipCode(zipInput);
     if (!clean) {
-      alert("Please enter a valid 5-digit US ZIP code.");
+      toast.error("Please enter a valid 5-digit US ZIP code.");
       return;
     }
     setIsSavingZip(true);

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { createJob } from "@/app/actions/jobs";
+import { createClient } from "@/lib/supabase/client";
 
 interface CreateJobModalProps {
   open: boolean;
@@ -37,7 +37,7 @@ export function CreateJobModal({
   }
 
   async function handleSubmit() {
-    if (!title || !department || !description || !requirements || !targetHeadcount) {
+    if (!title.trim() || !department.trim() || !description.trim() || !requirements.trim() || !targetHeadcount) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -45,14 +45,43 @@ export function CreateJobModal({
     setSaving(true);
     setError("");
     try {
-      const formData = new FormData();
-      formData.set("title", title);
-      formData.set("department", department);
-      formData.set("description", description);
-      formData.set("requirements", requirements);
-      formData.set("target_headcount", targetHeadcount);
+      const supabase = createClient();
 
-      await createJob(formData);
+      // Check duplicate job title
+      const { data: existingJob, error: checkError } = await supabase
+        .from("jobs")
+        .select("id")
+        .ilike("title", title.trim())
+        .limit(1);
+
+      if (checkError) {
+        console.error(checkError);
+      }
+
+      if (existingJob && existingJob.length > 0) {
+        setError("A job opening with this title already exists.");
+        setSaving(false);
+        return;
+      }
+
+      const { error: insertError } = await supabase
+        .from("jobs")
+        .insert({
+          title: title.trim(),
+          department: department.trim(),
+          location: "",
+          description: description.trim(),
+          requirements: requirements.trim(),
+          target_headcount: parseInt(targetHeadcount, 10) || 1,
+          status: "Active",
+        });
+
+      if (insertError) {
+        setError(insertError.message || "Failed to create job.");
+        setSaving(false);
+        return;
+      }
+
       reset();
       onJobCreated();
       onClose();

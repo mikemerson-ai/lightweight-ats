@@ -6,6 +6,16 @@ export const SHIFT_OPTIONS: { id: ShiftPreference; label: string; icon: string }
   { id: "Nights", label: "Nights", icon: "🌙" },
 ];
 
+export const AVAILABILITY_DAYS_OPTIONS = [
+  { id: "Su", label: "Su" },
+  { id: "M", label: "M" },
+  { id: "Tu", label: "Tu" },
+  { id: "W", label: "W" },
+  { id: "Th", label: "Th" },
+  { id: "F", label: "F" },
+  { id: "Sa", label: "Sa" },
+];
+
 export interface GroupHome {
   id: string;
   name: string;

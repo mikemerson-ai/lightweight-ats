@@ -42,10 +42,10 @@ export function KanbanColumn({
       {...attributes}
       {...listeners}
       className={[
-        "flex w-72 shrink-0 flex-col rounded-xl border h-full",
+        "flex w-72 shrink-0 flex-col rounded-xl border h-full transition-colors duration-200",
         isOver && !isOverlay
-          ? "border-secondary bg-secondary/10"
-          : "border-slate-200 bg-slate-50",
+          ? "border-secondary bg-secondary/10 shadow-inner"
+          : "border-slate-200 bg-slate-50 shadow-sm",
         isDragging && !isOverlay ? "opacity-60" : "",
       ].join(" ")}
     >
