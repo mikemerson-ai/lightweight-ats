@@ -213,50 +213,43 @@ export function BatchResumeUploadModal({
     const CONCURRENCY_LIMIT = 2;
     const newlyParsedMap = new Map<string, ParsedCandidate>();
 
-    for (let i = 0; i < itemsToProcess.length; i += CONCURRENCY_LIMIT) {
-      const batch = itemsToProcess.slice(i, i + CONCURRENCY_LIMIT);
-
-      await Promise.all(
-        batch.map(async (item) => {
-          // Update status to parsing
-          setQueue((prev) =>
-            prev.map((q) => (q.id === item.id ? { ...q, status: "parsing", error: undefined } : q))
-          );
-
-          try {
-            const formData = new FormData();
-            formData.append("file", item.file);
-            formData.append("jobId", targetJobId);
-
-            const result = await parseResumeAction(formData);
-
-            if (result.success && result.data) {
-              newlyParsedMap.set(item.id, result.data);
-              setQueue((prev) =>
-                prev.map((q) =>
-                  q.id === item.id ? { ...q, status: "done", parsedData: result.data } : q
-                )
-              );
-            } else {
-              setQueue((prev) =>
-                prev.map((q) =>
-                  q.id === item.id
-                    ? { ...q, status: "error", error: result.error || "Failed to extract candidate" }
-                    : q
-                )
-              );
-            }
-          } catch (err: any) {
-            setQueue((prev) =>
-              prev.map((q) =>
-                q.id === item.id
-                  ? { ...q, status: "error", error: err.message || "Network or extraction error" }
-                  : q
-              )
-            );
-          }
-        })
+    for (const item of itemsToProcess) {
+      setQueue((prev) =>
+        prev.map((q) => (q.id === item.id ? { ...q, status: "parsing", error: undefined } : q))
       );
+
+      try {
+        const formData = new FormData();
+        formData.append("file", item.file);
+        formData.append("jobId", targetJobId);
+
+        const result = await parseResumeAction(formData);
+
+        if (result.success && result.data) {
+          newlyParsedMap.set(item.id, result.data);
+          setQueue((prev) =>
+            prev.map((q) =>
+              q.id === item.id ? { ...q, status: "done", parsedData: result.data } : q
+            )
+          );
+        } else {
+          setQueue((prev) =>
+            prev.map((q) =>
+              q.id === item.id
+                ? { ...q, status: "error", error: result.error || "Failed to extract candidate" }
+                : q
+            )
+          );
+        }
+      } catch (err: any) {
+        setQueue((prev) =>
+          prev.map((q) =>
+            q.id === item.id
+              ? { ...q, status: "error", error: err.message || "Network or extraction error" }
+              : q
+          )
+        );
+      }
     }
 
     setIsProcessing(false);

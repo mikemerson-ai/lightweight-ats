@@ -193,7 +193,7 @@ EXECUTION WORKFLOW:
   let response;
   try {
     response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [prompt],
       config: {
         responseMimeType: "application/json",
@@ -201,17 +201,9 @@ EXECUTION WORKFLOW:
         temperature: 0.3,
       },
     });
-  } catch (error) {
-    console.warn("Fallback to gemini-3.5-flash-lite for outreach message generation:", error);
-    response = await ai.models.generateContent({
-      model: "gemini-3.5-flash-lite",
-      contents: [prompt],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: 0.3,
-      },
-    });
+  } catch (error: any) {
+    console.error("Error generating outreach message:", error);
+    throw new Error(`Failed to generate outreach message: ${error.message || "Unknown error"}`);
   }
 
   const rawText = response?.text || "";

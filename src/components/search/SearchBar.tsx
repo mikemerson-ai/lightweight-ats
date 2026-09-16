@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
+import { toast } from "sonner";
 import { type Candidate, searchCandidates } from "@/app/actions/candidates";
 
 export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidate: Candidate) => void }) {
@@ -9,8 +10,8 @@ export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidat
   const [results, setResults] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -33,7 +34,9 @@ export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidat
           setResults(data);
           setOpen(true);
         })
-        .catch(() => {
+        .catch((err: any) => {
+          console.error("Search failed:", err);
+          toast.error("Failed to perform search. Please try again.");
           setResults([]);
           setOpen(true);
         })

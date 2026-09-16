@@ -152,26 +152,32 @@ export async function getCandidateDocuments(
 }
 
 export async function searchCandidates(query: string): Promise<Candidate[]> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const trimmed = query.trim();
-  if (!trimmed) {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("candidates")
+      .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+      .or(
+        `first_name.ilike.%${trimmed}%,last_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%,phone.ilike.%${trimmed}%,primary_skills.ilike.%${trimmed}%,status_tag.ilike.%${trimmed}%`,
+      )
+      .limit(10);
+
+    if (error) {
+      console.error("Search candidates error:", error);
+      return [];
+    }
+
+    return (data as Candidate[]) ?? [];
+  } catch (err: any) {
+    console.error("Exception in searchCandidates:", err);
     return [];
   }
-
-  const { data, error } = await supabase
-    .from("candidates")
-    .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
-    .or(
-      `first_name.ilike.%${trimmed}%,last_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%,phone.ilike.%${trimmed}%,primary_skills.ilike.%${trimmed}%,status_tag.ilike.%${trimmed}%`,
-    )
-    .limit(10);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data as Candidate[]) ?? [];
 }
 
 export interface ExistingCandidateRecord {

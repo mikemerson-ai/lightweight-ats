@@ -31,7 +31,7 @@ export interface ParsedCandidate {
 
 export async function parseResumeData(payload: File | string, jobContext?: JobContext): Promise<ParsedCandidate> {
   if (!jobContext?.title || !jobContext?.description || jobContext.description.trim().length === 0) {
-    throw new Error("FATAL: Missing jobTitle or jobDescription in parseResume.");
+    throw new Error("Job context missing. Cannot parse resume without a valid job description.");
   }
 
   const schema = {

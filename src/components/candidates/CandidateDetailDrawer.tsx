@@ -383,7 +383,7 @@ export function CandidateDetailDrawer({
     if (!candidate) return;
     setIsSavingProfile(true);
     try {
-      await updateCandidateProfile(candidate.id, {
+      const result = await updateCandidateProfile(candidate.id, {
         ...editForm,
         years_of_experience: editForm.years_of_experience ? Number(editForm.years_of_experience) : null,
         date_applied: editForm.date_applied || undefined,
@@ -393,6 +393,12 @@ export function CandidateDetailDrawer({
         shift_preferences: editForm.shift_preferences || [],
         availability_days: editForm.availability_days || [],
       });
+
+      if (!result.success) {
+        toast.error("Failed to save profile: " + (result.error || "Unknown error"));
+        return;
+      }
+
       const updated = {
         ...activeCandidate,
         ...editForm,
@@ -405,7 +411,7 @@ export function CandidateDetailDrawer({
       onCandidateUpdated?.(updated);
       setShowEditModal(false);
     } catch (err: any) {
-      toast.error("Failed to update profile: " + err.message);
+      toast.error("Failed to update profile: " + (err.message || "An unexpected error occurred"));
     } finally {
       setIsSavingProfile(false);
     }
