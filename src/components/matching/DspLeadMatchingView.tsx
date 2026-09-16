@@ -6,18 +6,18 @@ import {
   Car,
   Clock,
   Search,
-  Filter,
   Users,
   Building2,
-  CalendarClock,
   ArrowUpDown,
   RefreshCw,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Check,
-  Sparkles,
   SlidersHorizontal,
+  RotateCcw,
+  Sparkles,
+  Phone,
+  Mail,
+  Compass,
 } from "lucide-react";
 import type { Candidate } from "@/app/actions/candidates";
 import { getDspCandidates } from "@/app/actions/candidates";
@@ -38,39 +38,53 @@ const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   interview: { label: "Interview", color: "bg-amber-50 text-amber-700 border-amber-200" },
   completing_requirements: { label: "Requirements", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   offer: { label: "Offer", color: "bg-teal-50 text-teal-700 border-teal-200" },
-  background_checks: { label: "Background", color: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+  background_checks: { label: "Background", color: "bg-orange-50 text-orange-700 border-orange-200" },
   hired: { label: "Hired", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   disqualified: { label: "Rejected", color: "bg-rose-50 text-rose-700 border-rose-200" },
 };
+
+interface EnrichedCandidate {
+  candidate: Candidate;
+  distanceMiles: number | null;
+  commuteMinutes: number | null;
+  matchedHome: GroupHome | null;
+  isAllHomesRanking: boolean;
+}
 
 export function DspLeadMatchingView() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [groupHomes, setGroupHomes] = useState<GroupHome[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filters
   const [selectedHomeId, setSelectedHomeId] = useState<string>("all");
-  const [selectedRadius, setSelectedRadius] = useState<number | "any">(15);
+  const [selectedRadius, setSelectedRadius] = useState<number | "any">(10);
   const [selectedShifts, setSelectedShifts] = useState<ShiftPreference[]>([]);
   const [selectedStage, setSelectedStage] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Sorting
   const [sortBy, setSortBy] = useState<"distance" | "commute" | "name" | "recent">("distance");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Drawer
   const [drawerCandidate, setDrawerCandidate] = useState<Candidate | null>(null);
 
-  async function loadData() {
+  const loadData = async () => {
     setLoading(true);
     try {
-      const [candidatesData, homesData] = await Promise.all([
+      const [candData, homesData] = await Promise.all([
         getDspCandidates(),
         getGroupHomes(),
       ]);
-      setCandidates(candidatesData);
+      setCandidates(candData);
       setGroupHomes(homesData);
     } catch (err) {
       console.error("Failed to load DSP lead matching data:", err);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     loadData();
@@ -81,134 +95,158 @@ export function DspLeadMatchingView() {
     return groupHomes.find((h) => h.id === selectedHomeId) || null;
   }, [selectedHomeId, groupHomes]);
 
-  // Compute distance and closest group home for each candidate
-  const enrichedCandidates = useMemo(() => {
+  // Enrich candidates with commute & distance calculations
+  const enrichedCandidates = useMemo<EnrichedCandidate[]>(() => {
+    if (groupHomes.length === 0) {
+      return candidates.map((c) => ({
+        candidate: c,
+        distanceMiles: null,
+        commuteMinutes: null,
+        matchedHome: null,
+        isAllHomesRanking: false,
+      }));
+    }
+
     return candidates.map((candidate) => {
-      const cleanZip = normalizeZipCode(candidate.zip_code);
+      const candidateZip = normalizeZipCode(candidate.zip_code);
 
       if (selectedHome) {
-        // Distance specifically to selected group home
-        const dist = cleanZip ? calculateDistanceMiles(cleanZip, selectedHome.zip_code) : null;
+        if (!candidateZip) {
+          return {
+            candidate,
+            distanceMiles: null,
+            commuteMinutes: null,
+            matchedHome: selectedHome,
+            isAllHomesRanking: false,
+          };
+        }
+        const dist = calculateDistanceMiles(candidateZip, selectedHome.zip_code);
         const commute = calculateCommuteMinutes(dist);
         return {
           candidate,
-          cleanZip,
-          matchedHome: selectedHome,
           distanceMiles: dist,
           commuteMinutes: commute,
+          matchedHome: selectedHome,
+          isAllHomesRanking: false,
         };
       } else {
-        // Distance to closest group home
-        const closest = cleanZip ? findClosestGroupHome(cleanZip, groupHomes) : null;
+        if (!candidateZip) {
+          return {
+            candidate,
+            distanceMiles: null,
+            commuteMinutes: null,
+            matchedHome: null,
+            isAllHomesRanking: true,
+          };
+        }
+        const closest = findClosestGroupHome(candidateZip, groupHomes);
         return {
           candidate,
-          cleanZip,
-          matchedHome: closest ? closest.home : null,
           distanceMiles: closest?.distanceMiles ?? null,
           commuteMinutes: closest?.commuteMinutes ?? null,
+          matchedHome: closest?.home ?? null,
+          isAllHomesRanking: true,
         };
       }
     });
   }, [candidates, groupHomes, selectedHome]);
 
-  // Filter candidates according to user criteria
+  // Filter candidates
   const filteredCandidates = useMemo(() => {
     return enrichedCandidates.filter((item) => {
       const c = item.candidate;
 
-      // 1. Search Query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const fullName = `${c.first_name} ${c.last_name}`.toLowerCase();
-        const email = (c.email || "").toLowerCase();
-        const phone = (c.phone || "").toLowerCase();
-        const zip = (c.zip_code || "").toLowerCase();
-        const address = (c.address || "").toLowerCase();
-        const skills = (c.primary_skills || "").toLowerCase();
-        const homeName = item.matchedHome ? item.matchedHome.name.toLowerCase() : "";
-
-        if (
-          !fullName.includes(query) &&
-          !email.includes(query) &&
-          !phone.includes(query) &&
-          !zip.includes(query) &&
-          !address.includes(query) &&
-          !skills.includes(query) &&
-          !homeName.includes(query)
-        ) {
-          return false;
-        }
+      // Stage filter
+      if (selectedStage !== "all" && c.pipeline_stage !== selectedStage) {
+        return false;
       }
 
-      // 2. Radius Filter
+      // Radius filter
       if (selectedRadius !== "any") {
-        if (item.distanceMiles === null || item.distanceMiles > selectedRadius) {
-          return false;
-        }
+        if (item.distanceMiles === null) return false;
+        if (item.distanceMiles > selectedRadius) return false;
       }
 
-      // 3. Shift Preference Filter (Candidate must support at least one of selected shifts)
+      // Shifts filter
       if (selectedShifts.length > 0) {
         const candidateShifts = c.shift_preferences || [];
-        const hasMatchingShift = selectedShifts.some((s) => candidateShifts.includes(s));
-        if (!hasMatchingShift) {
-          return false;
-        }
+        const hasMatch = selectedShifts.some((s) => candidateShifts.includes(s));
+        if (!hasMatch) return false;
       }
 
-      // 4. Pipeline Stage Filter
-      if (selectedStage !== "all") {
-        if (c.pipeline_stage !== selectedStage) {
+      // Search Query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const fullName = `${c.first_name || ""} ${c.last_name || ""}`.toLowerCase();
+        const skills = (c.primary_skills || "").toLowerCase();
+        const zip = (c.zip_code || "").toLowerCase();
+        const email = (c.email || "").toLowerCase();
+        const phone = (c.phone || "").toLowerCase();
+        const homeName = item.matchedHome?.name.toLowerCase() || "";
+
+        if (
+          !fullName.includes(q) &&
+          !skills.includes(q) &&
+          !zip.includes(q) &&
+          !email.includes(q) &&
+          !phone.includes(q) &&
+          !homeName.includes(q)
+        ) {
           return false;
         }
       }
 
       return true;
     });
-  }, [enrichedCandidates, searchQuery, selectedRadius, selectedShifts, selectedStage]);
+  }, [enrichedCandidates, selectedStage, selectedRadius, selectedShifts, searchQuery]);
 
   // Sort candidates
   const sortedCandidates = useMemo(() => {
-    return [...filteredCandidates].sort((a, b) => {
+    const list = [...filteredCandidates];
+
+    list.sort((a, b) => {
       let comparison = 0;
+
       if (sortBy === "distance") {
-        const distA = a.distanceMiles ?? 9999;
-        const distB = b.distanceMiles ?? 9999;
-        comparison = distA - distB;
+        if (a.distanceMiles === null && b.distanceMiles === null) comparison = 0;
+        else if (a.distanceMiles === null) comparison = 1;
+        else if (b.distanceMiles === null) comparison = -1;
+        else comparison = a.distanceMiles - b.distanceMiles;
       } else if (sortBy === "commute") {
-        const commA = a.commuteMinutes ?? 9999;
-        const commB = b.commuteMinutes ?? 9999;
-        comparison = commA - commB;
+        if (a.commuteMinutes === null && b.commuteMinutes === null) comparison = 0;
+        else if (a.commuteMinutes === null) comparison = 1;
+        else if (b.commuteMinutes === null) comparison = -1;
+        else comparison = a.commuteMinutes - b.commuteMinutes;
       } else if (sortBy === "name") {
         const nameA = `${a.candidate.last_name} ${a.candidate.first_name}`.toLowerCase();
         const nameB = `${b.candidate.last_name} ${b.candidate.first_name}`.toLowerCase();
         comparison = nameA.localeCompare(nameB);
       } else if (sortBy === "recent") {
-        const dateA = new Date(a.candidate.created_at).getTime();
-        const dateB = new Date(b.candidate.created_at).getTime();
+        const dateA = new Date(a.candidate.created_at || 0).getTime();
+        const dateB = new Date(b.candidate.created_at || 0).getTime();
         comparison = dateB - dateA;
       }
 
       return sortDirection === "asc" ? comparison : -comparison;
     });
+
+    return list;
   }, [filteredCandidates, sortBy, sortDirection]);
 
-  // Stats calculation
+  // Quick stats
   const stats = useMemo(() => {
-    const total = enrichedCandidates.length;
+    const total = candidates.length;
     const withinRadiusCount = filteredCandidates.length;
 
     let daysCount = 0;
     let eveningsCount = 0;
     let nightsCount = 0;
-    let unspecifiedShiftsCount = 0;
 
     filteredCandidates.forEach((item) => {
       const shifts = item.candidate.shift_preferences || [];
       if (shifts.includes("Days")) daysCount++;
       if (shifts.includes("Evenings")) eveningsCount++;
       if (shifts.includes("Nights")) nightsCount++;
-      if (shifts.length === 0) unspecifiedShiftsCount++;
     });
 
     const validCommutes = filteredCandidates
@@ -224,10 +262,27 @@ export function DspLeadMatchingView() {
       daysCount,
       eveningsCount,
       nightsCount,
-      unspecifiedShiftsCount,
       avgCommute,
     };
-  }, [enrichedCandidates, filteredCandidates]);
+  }, [candidates, filteredCandidates]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedHomeId !== "all") count++;
+    if (selectedRadius !== "any") count++;
+    if (selectedShifts.length > 0) count += selectedShifts.length;
+    if (selectedStage !== "all") count++;
+    if (searchQuery.trim()) count++;
+    return count;
+  }, [selectedHomeId, selectedRadius, selectedShifts, selectedStage, searchQuery]);
+
+  function resetAllFilters() {
+    setSelectedHomeId("all");
+    setSelectedRadius("any");
+    setSelectedShifts([]);
+    setSelectedStage("all");
+    setSearchQuery("");
+  }
 
   function handleShiftToggle(shift: ShiftPreference) {
     setSelectedShifts((prev) =>
@@ -249,111 +304,199 @@ export function DspLeadMatchingView() {
       return { label: "No ZIP", color: "bg-slate-100 text-slate-500 border-slate-200" };
     }
     if (miles <= 5) {
-      return { label: "≤ 5 mi (Local)", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      return { label: `≤ 5 mi (Local)`, color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     }
     if (miles <= 10) {
-      return { label: "≤ 10 mi (Ideal)", color: "bg-sky-50 text-sky-700 border-sky-200" };
+      return { label: `≤ 10 mi (Ideal)`, color: "bg-sky-50 text-sky-700 border-sky-200" };
     }
     if (miles <= 18) {
-      return { label: "≤ 18 mi (Moderate)", color: "bg-amber-50 text-amber-700 border-amber-200" };
+      return { label: `≤ 18 mi (Moderate)`, color: "bg-amber-50 text-amber-700 border-amber-200" };
     }
-    return { label: "> 18 mi (Long)", color: "bg-rose-50 text-rose-700 border-rose-200" };
+    return { label: `> 18 mi (Long)`, color: "bg-rose-50 text-rose-700 border-rose-200" };
   }
 
   return (
-    <div className="flex h-full flex-col space-y-5">
-      {/* Top Header & Refresh */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-600 text-white shadow-2xs">
-                <MapPin className="h-4 w-4" />
-              </span>
-              DSP Lead Matching & Proximity
-            </h2>
-            <span className="rounded-full bg-sky-100 text-sky-800 px-2.5 py-0.5 text-xs font-bold border border-sky-200">
-              Offline Geo Engine
-            </span>
+    <div className="flex h-full flex-col space-y-4">
+      {/* View Header & Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-600 text-white shadow-xs shrink-0">
+            <Compass className="h-5 w-5" />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Zero-cost geographic matching across all 15 Reliance group homes with shift availability filters.
-          </p>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-bold text-slate-900 leading-tight">
+                DSP Proximity & Shift Matching
+              </h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 text-sky-700 px-2 py-0.5 text-[11px] font-bold border border-sky-200/60">
+                <Sparkles className="w-3 h-3 text-sky-500" />
+                Offline Proximity Engine
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Live distance calculations across 15 group homes with zero external API fees
+            </p>
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={loadData}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs disabled:opacity-50 cursor-pointer self-start sm:self-auto"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-sky-600" : ""}`} />
-          <span>{loading ? "Refreshing..." : "Refresh Leads"}</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {activeFiltersCount > 0 && (
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 px-3 py-1.5 text-xs font-semibold transition cursor-pointer shadow-2xs"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
+              <span>Reset Filters ({activeFiltersCount})</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-semibold transition cursor-pointer shadow-2xs disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-sky-600" : "text-slate-400"}`} />
+            <span>{loading ? "Refreshing..." : "Refresh"}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Top Stat Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-            <Users className="h-3.5 w-3.5 text-slate-400" />
-            Total DSP Leads
+      {/* Interactive KPI & Filter Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Candidates Card */}
+        <div
+          onClick={resetAllFilters}
+          className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs hover:border-slate-300 transition-all cursor-pointer group"
+          title="Click to reset filters and view all candidates"
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Users className="h-3.5 w-3.5 text-slate-400" />
+              Total Leads
+            </span>
           </div>
-          <div className="mt-1 text-2xl font-black text-slate-900">{stats.total}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">In recruiting pool</div>
+          <div className="mt-1 text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">
+            {stats.total}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Entire applicant pool</div>
         </div>
 
-        <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3.5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-sky-700 flex items-center gap-1">
-            <Car className="h-3.5 w-3.5 text-sky-600" />
-            Within Radius
+        {/* Within Radius Filter Card */}
+        <div
+          onClick={() => setSelectedRadius((prev) => (prev === 10 ? "any" : 10))}
+          className={`rounded-xl border p-3.5 shadow-2xs transition-all cursor-pointer ${
+            selectedRadius !== "any"
+              ? "border-sky-300 bg-sky-50/70 ring-2 ring-sky-500/20"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+          title="Click to toggle 10-mile radius filter"
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-sky-700 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Car className="h-3.5 w-3.5 text-sky-600" />
+              Radius Match
+            </span>
+            {selectedRadius !== "any" && (
+              <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+            )}
           </div>
           <div className="mt-1 text-2xl font-black text-sky-950">
             {stats.withinRadiusCount}
           </div>
-          <div className="text-[11px] text-sky-700/80 mt-0.5">
-            {selectedRadius === "any" ? "Any distance" : `≤ ${selectedRadius} miles`}
+          <div className="text-[11px] text-sky-700 font-medium mt-0.5 truncate">
+            {selectedRadius === "any" ? "Any radius" : `≤ ${selectedRadius} mi radius`}
           </div>
         </div>
 
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-            <span>☀️</span> Days Shift
+        {/* Days Shift Card */}
+        <div
+          onClick={() => handleShiftToggle("Days")}
+          className={`rounded-xl border p-3.5 shadow-2xs transition-all cursor-pointer ${
+            selectedShifts.includes("Days")
+              ? "border-emerald-300 bg-emerald-50/70 ring-2 ring-emerald-500/20"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+          title="Click to toggle Days shift filter"
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <span>☀️</span> Days Shift
+            </span>
+            {selectedShifts.includes("Days") && (
+              <Check className="h-3.5 w-3.5 text-emerald-600" />
+            )}
           </div>
           <div className="mt-1 text-2xl font-black text-emerald-950">{stats.daysCount}</div>
-          <div className="text-[11px] text-emerald-700/80 mt-0.5">Candidates available</div>
+          <div className="text-[11px] text-emerald-700/80 font-medium mt-0.5 truncate">
+            {selectedShifts.includes("Days") ? "Active filter" : "Click to filter"}
+          </div>
         </div>
 
-        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-800 flex items-center gap-1">
-            <span>🌆</span> Evenings
+        {/* Evenings Shift Card */}
+        <div
+          onClick={() => handleShiftToggle("Evenings")}
+          className={`rounded-xl border p-3.5 shadow-2xs transition-all cursor-pointer ${
+            selectedShifts.includes("Evenings")
+              ? "border-amber-300 bg-amber-50/70 ring-2 ring-amber-500/20"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+          title="Click to toggle Evenings shift filter"
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <span>🌆</span> Evenings
+            </span>
+            {selectedShifts.includes("Evenings") && (
+              <Check className="h-3.5 w-3.5 text-amber-600" />
+            )}
           </div>
           <div className="mt-1 text-2xl font-black text-amber-950">{stats.eveningsCount}</div>
-          <div className="text-[11px] text-amber-700/80 mt-0.5">Candidates available</div>
+          <div className="text-[11px] text-amber-700/80 font-medium mt-0.5 truncate">
+            {selectedShifts.includes("Evenings") ? "Active filter" : "Click to filter"}
+          </div>
         </div>
 
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3.5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-indigo-800 flex items-center gap-1">
-            <span>🌙</span> Nights
+        {/* Nights Shift Card */}
+        <div
+          onClick={() => handleShiftToggle("Nights")}
+          className={`rounded-xl border p-3.5 shadow-2xs transition-all cursor-pointer ${
+            selectedShifts.includes("Nights")
+              ? "border-indigo-300 bg-indigo-50/70 ring-2 ring-indigo-500/20"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+          title="Click to toggle Nights shift filter"
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-800 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <span>🌙</span> Nights
+            </span>
+            {selectedShifts.includes("Nights") && (
+              <Check className="h-3.5 w-3.5 text-indigo-600" />
+            )}
           </div>
           <div className="mt-1 text-2xl font-black text-indigo-950">{stats.nightsCount}</div>
-          <div className="text-[11px] text-indigo-700/80 mt-0.5">Overnight / awake</div>
+          <div className="text-[11px] text-indigo-700/80 font-medium mt-0.5 truncate">
+            {selectedShifts.includes("Nights") ? "Active filter" : "Click to filter"}
+          </div>
         </div>
 
+        {/* Avg. Commute Card */}
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
             <Clock className="h-3.5 w-3.5 text-slate-400" />
             Avg. Commute
           </div>
           <div className="mt-1 text-2xl font-black text-slate-900">
             {stats.avgCommute !== null ? `~${stats.avgCommute}m` : "—"}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Suburban factor 1.8x</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Suburban transit model</div>
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3.5">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
           {/* Search bar */}
           <div className="md:col-span-4 relative">
@@ -362,7 +505,7 @@ export function DspLeadMatchingView() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search candidate name, phone, ZIP, skills..."
+              placeholder="Search by name, skills, ZIP code, or group home..."
               className="w-full rounded-lg border border-slate-200 pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
             />
           </div>
@@ -379,7 +522,7 @@ export function DspLeadMatchingView() {
                 <option value="all">📍 All 15 Group Homes (Rank by Closest)</option>
                 {groupHomes.map((home) => (
                   <option key={home.id} value={home.id}>
-                    {home.name} — {home.address}, {home.city} {home.zip_code}
+                    {home.name} — {home.address} ({home.zip_code})
                   </option>
                 ))}
               </select>
@@ -388,19 +531,22 @@ export function DspLeadMatchingView() {
 
           {/* Radius Selector */}
           <div className="md:col-span-2">
-            <select
-              value={String(selectedRadius)}
-              onChange={(e) =>
-                setSelectedRadius(e.target.value === "any" ? "any" : Number(e.target.value))
-              }
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-            >
-              <option value="5">Within 5 miles</option>
-              <option value="10">Within 10 miles</option>
-              <option value="15">Within 15 miles</option>
-              <option value="25">Within 25 miles</option>
-              <option value="any">Any Distance</option>
-            </select>
+            <div className="flex items-center gap-1.5">
+              <Car className="h-4 w-4 text-slate-400 shrink-0" />
+              <select
+                value={String(selectedRadius)}
+                onChange={(e) =>
+                  setSelectedRadius(e.target.value === "any" ? "any" : Number(e.target.value))
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              >
+                <option value="5">Within 5 miles</option>
+                <option value="10">Within 10 miles</option>
+                <option value="15">Within 15 miles</option>
+                <option value="25">Within 25 miles</option>
+                <option value="any">Any Distance</option>
+              </select>
+            </div>
           </div>
 
           {/* Pipeline Stage Filter */}
@@ -410,7 +556,7 @@ export function DspLeadMatchingView() {
               onChange={(e) => setSelectedStage(e.target.value)}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
             >
-              <option value="all">All Stages</option>
+              <option value="all">All Pipeline Stages</option>
               <option value="new_application">New Application</option>
               <option value="screening">Screening</option>
               <option value="interview">Interview</option>
@@ -423,12 +569,13 @@ export function DspLeadMatchingView() {
           </div>
         </div>
 
-        {/* Second Row: Shift Preferences Filter Pills */}
+        {/* Second Row: Radius Preset Pills & Shift Filters */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          {/* Shift Preferences Pills */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+            <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 mr-1">
               <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
-              Filter by Available Shifts:
+              Shifts:
             </span>
             {SHIFT_OPTIONS.map((shift) => {
               const isSelected = selectedShifts.includes(shift.id);
@@ -437,7 +584,7 @@ export function DspLeadMatchingView() {
                   key={shift.id}
                   type="button"
                   onClick={() => handleShiftToggle(shift.id)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer border shadow-2xs ${
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition cursor-pointer border shadow-2xs ${
                     isSelected
                       ? "bg-sky-600 text-white border-sky-600 ring-2 ring-sky-600/20"
                       : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
@@ -449,29 +596,87 @@ export function DspLeadMatchingView() {
                 </button>
               );
             })}
-            {selectedShifts.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectedShifts([])}
-                className="text-[11px] text-slate-400 hover:text-slate-600 underline ml-1 cursor-pointer"
-              >
-                Clear shifts
-              </button>
-            )}
           </div>
 
-          {/* Active Filter Summary */}
-          <div className="text-xs text-slate-500 font-medium">
-            Showing <strong className="text-slate-800">{sortedCandidates.length}</strong> matching candidates
+          {/* Quick Radius Pills */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="font-semibold text-slate-600 mr-1">Radius:</span>
+            {[5, 10, 15, "any"].map((r) => {
+              const active = selectedRadius === r;
+              return (
+                <button
+                  key={String(r)}
+                  type="button"
+                  onClick={() => setSelectedRadius(r as number | "any")}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer border ${
+                    active
+                      ? "bg-sky-50 text-sky-700 border-sky-300 font-bold"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {r === "any" ? "Any" : `≤ ${r} mi`}
+                </button>
+              );
+            })}
           </div>
         </div>
+
+        {/* Selected Home Context Notification (if a specific home is selected) */}
+        {selectedHome && (
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-sky-50/70 border border-sky-200/80 text-xs text-sky-900">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-sky-600 shrink-0" />
+              <span>
+                Matching specifically for: <strong>{selectedHome.name}</strong> ({selectedHome.address}, {selectedHome.city} {selectedHome.zip_code})
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedHomeId("all")}
+              className="text-sky-700 hover:text-sky-900 underline font-semibold text-[11px] cursor-pointer"
+            >
+              Show all homes
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Sortable Leads Table */}
-      <div className="flex-1 rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden flex flex-col">
-        <div className="overflow-x-auto">
+      <div className="flex-1 rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden flex flex-col min-h-[400px]">
+        {/* Table summary bar */}
+        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <div>
+            Showing <strong className="text-slate-800">{sortedCandidates.length}</strong> matching candidates
+          </div>
+          <div className="flex items-center gap-3">
+            <span>Sort by:</span>
+            <button
+              type="button"
+              onClick={() => toggleSort("distance")}
+              className={`font-medium hover:text-slate-900 cursor-pointer ${sortBy === "distance" ? "text-sky-600 font-bold" : ""}`}
+            >
+              Distance {sortBy === "distance" && (sortDirection === "asc" ? "↑" : "↓")}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSort("commute")}
+              className={`font-medium hover:text-slate-900 cursor-pointer ${sortBy === "commute" ? "text-sky-600 font-bold" : ""}`}
+            >
+              Commute {sortBy === "commute" && (sortDirection === "asc" ? "↑" : "↓")}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSort("name")}
+              className={`font-medium hover:text-slate-900 cursor-pointer ${sortBy === "name" ? "text-sky-600 font-bold" : ""}`}
+            >
+              Name {sortBy === "name" && (sortDirection === "asc" ? "↑" : "↓")}
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto flex-1">
           <table className="w-full text-left text-xs text-slate-600 divide-y divide-slate-200">
-            <thead className="bg-slate-50 font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
+            <thead className="bg-slate-50/80 font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
               <tr>
                 <th
                   onClick={() => toggleSort("name")}
@@ -483,7 +688,7 @@ export function DspLeadMatchingView() {
                   </div>
                 </th>
                 <th className="py-3 px-4">Stage</th>
-                <th className="py-3 px-4">ZIP / Location</th>
+                <th className="py-3 px-4">Candidate Location</th>
                 <th className="py-3 px-4">Target Group Home</th>
                 <th
                   onClick={() => toggleSort("distance")}
@@ -510,148 +715,179 @@ export function DspLeadMatchingView() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-16 text-center text-slate-400">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto text-sky-600 mb-2" />
-                    Calculating commute math and matching group homes...
+                    Calculating proximity math and ranking DSP candidates...
                   </td>
                 </tr>
               ) : sortedCandidates.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-16 text-center text-slate-400">
                     <MapPin className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                    <p className="font-semibold text-slate-600">No candidates match your filters.</p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Try expanding the search radius or clearing specific shift filters.
+                    <p className="font-semibold text-slate-700 text-sm">No candidates match your filters.</p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                      Try expanding the distance radius or clearing specific shift preference filters.
                     </p>
+                    {activeFiltersCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={resetAllFilters}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-semibold transition cursor-pointer"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>Reset All Filters</span>
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
-                sortedCandidates.map(({ candidate, matchedHome, distanceMiles, commuteMinutes }) => {
-                  const stageInfo = STAGE_CONFIG[candidate.pipeline_stage] || {
+                sortedCandidates.map((item) => {
+                  const candidate = item.candidate;
+                  const stage = STAGE_CONFIG[candidate.pipeline_stage] || {
                     label: candidate.pipeline_stage,
                     color: "bg-slate-100 text-slate-700 border-slate-200",
                   };
-                  const proxBadge = getProximityBadge(distanceMiles);
+                  const proxBadge = getProximityBadge(item.distanceMiles);
+                  const shifts = candidate.shift_preferences || [];
+                  const initials = `${(candidate.first_name || "")[0] || ""}${(candidate.last_name || "")[0] || ""}`.toUpperCase();
 
                   return (
                     <tr
                       key={candidate.id}
                       onClick={() => setDrawerCandidate(candidate)}
-                      className="hover:bg-sky-50/40 cursor-pointer transition"
+                      className="hover:bg-slate-50/80 transition cursor-pointer group"
                     >
-                      {/* Candidate Name & Role */}
+                      {/* Candidate Name & Contact */}
                       <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                          {candidate.first_name} {candidate.last_name}
-                          {candidate.dnh_flag && (
-                            <span className="rounded bg-red-100 text-red-700 border border-red-200 text-[10px] px-1.5 py-0.2 font-bold">
-                              DNH
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500">
-                          {candidate.jobs?.title || "Direct Support Professional"}
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          {candidate.phone || candidate.email || "No contact"}
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-sky-100 group-hover:text-sky-800 transition-colors shadow-2xs">
+                            {initials || "C"}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 group-hover:text-sky-600 transition-colors">
+                              {candidate.first_name} {candidate.last_name}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                              {candidate.phone && (
+                                <span className="flex items-center gap-0.5">
+                                  <Phone className="h-3 w-3" />
+                                  {candidate.phone}
+                                </span>
+                              )}
+                              {candidate.email && (
+                                <span className="flex items-center gap-0.5 truncate max-w-[140px]">
+                                  <Mail className="h-3 w-3" />
+                                  {candidate.email}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
 
                       {/* Stage Badge */}
                       <td className="py-3 px-4">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${stageInfo.color}`}
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${stage.color}`}
                         >
-                          {stageInfo.label}
+                          {stage.label}
                         </span>
                       </td>
 
-                      {/* ZIP / Location */}
+                      {/* Candidate Location */}
                       <td className="py-3 px-4">
-                        {candidate.zip_code ? (
-                          <div>
-                            <span className="font-bold text-slate-800 text-xs flex items-center gap-1">
-                              <MapPin className="h-3.5 w-3.5 text-sky-600" />
+                        <div className="font-medium text-slate-900">
+                          {candidate.zip_code ? (
+                            <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-semibold">
                               {candidate.zip_code}
                             </span>
-                            {candidate.address && (
-                              <div className="text-[11px] text-slate-400 truncate max-w-[150px]">
-                                {candidate.address}
-                              </div>
-                            )}
+                          ) : (
+                            <span className="text-slate-400 italic">No ZIP set</span>
+                          )}
+                        </div>
+                        {candidate.address && (
+                          <div className="text-[11px] text-slate-400 truncate max-w-[150px]">
+                            {candidate.address}
                           </div>
-                        ) : (
-                          <span className="rounded bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold">
-                            ZIP Missing
-                          </span>
                         )}
                       </td>
 
                       {/* Target Group Home */}
                       <td className="py-3 px-4">
-                        {matchedHome ? (
+                        {item.matchedHome ? (
                           <div>
-                            <div className="font-semibold text-slate-800 flex items-center gap-1">
-                              <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                              {matchedHome.name}
+                            <div className="font-semibold text-slate-900 flex items-center gap-1">
+                              <Building2 className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                              <span>{item.matchedHome.name}</span>
                             </div>
                             <div className="text-[11px] text-slate-400">
-                              {matchedHome.address}, {matchedHome.city}
+                              {item.matchedHome.address} ({item.matchedHome.zip_code})
                             </div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-xs">No home matched</span>
+                          <span className="text-slate-400 italic">—</span>
                         )}
                       </td>
 
-                      {/* Distance */}
+                      {/* Distance Badge */}
                       <td className="py-3 px-4">
-                        {distanceMiles !== null ? (
-                          <div>
-                            <div className="font-extrabold text-slate-900 text-sm">
-                              {distanceMiles} mi
-                            </div>
-                            <span
-                              className={`inline-block rounded px-1.5 py-0.2 text-[10px] font-medium border ${proxBadge.color}`}
-                            >
-                              {proxBadge.label}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${proxBadge.color}`}
+                          >
+                            <MapPin className="h-3 w-3" />
+                            {item.distanceMiles !== null ? `${item.distanceMiles} miles` : "—"}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {proxBadge.label}
+                          </span>
+                        </div>
                       </td>
 
-                      {/* Commute Duration */}
+                      {/* Commute Time */}
                       <td className="py-3 px-4">
-                        {commuteMinutes !== null ? (
+                        {item.commuteMinutes !== null ? (
                           <div className="flex items-center gap-1 font-semibold text-slate-800">
-                            <Car className="h-3.5 w-3.5 text-sky-600" />
-                            ~{commuteMinutes} min
+                            <Clock className="h-3.5 w-3.5 text-slate-400" />
+                            <span>~{item.commuteMinutes} mins</span>
                           </div>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-slate-400 italic">—</span>
                         )}
                       </td>
 
                       {/* Shift Preferences */}
                       <td className="py-3 px-4">
-                        {candidate.shift_preferences && candidate.shift_preferences.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {candidate.shift_preferences.map((shift) => (
-                              <span
-                                key={shift}
-                                className="inline-flex items-center gap-0.5 rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-[10px] font-semibold border border-slate-200"
-                              >
-                                <span>
-                                  {shift === "Days" ? "☀️" : shift === "Evenings" ? "🌆" : "🌙"}
-                                </span>
-                                <span>{shift}</span>
-                              </span>
-                            ))}
-                          </div>
+                        {shifts.length === 0 ? (
+                          <span className="text-slate-400 text-[11px] italic">Not specified</span>
                         ) : (
-                          <span className="text-slate-400 text-[11px]">Unspecified</span>
+                          <div className="flex flex-wrap gap-1">
+                            {shifts.map((s) => {
+                              const isDays = s === "Days";
+                              const isEvenings = s === "Evenings";
+                              const isNights = s === "Nights";
+
+                              const color = isDays
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : isEvenings
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : isNights
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                : "bg-slate-50 text-slate-700 border-slate-200";
+
+                              const icon = isDays ? "☀️" : isEvenings ? "🌆" : isNights ? "🌙" : "•";
+
+                              return (
+                                <span
+                                  key={s}
+                                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${color}`}
+                                >
+                                  <span>{icon}</span>
+                                  <span>{s}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
                         )}
                       </td>
 
@@ -660,7 +896,7 @@ export function DspLeadMatchingView() {
                         <button
                           type="button"
                           onClick={() => setDrawerCandidate(candidate)}
-                          className="inline-flex items-center gap-1 rounded-md bg-slate-100 hover:bg-sky-600 hover:text-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition cursor-pointer shadow-2xs"
+                          className="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-sky-600 hover:text-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition cursor-pointer shadow-2xs"
                         >
                           <span>Open Drawer</span>
                           <ExternalLink className="h-3 w-3" />
@@ -697,3 +933,5 @@ export function DspLeadMatchingView() {
     </div>
   );
 }
+
+export default DspLeadMatchingView;

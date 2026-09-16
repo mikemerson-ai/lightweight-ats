@@ -18,15 +18,24 @@ export const metadata: Metadata = {
 };
 
 import { RecruiterProvider } from "@/context/RecruiterContext";
+import { getRecruiters } from "@/app/actions/recruiters";
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const recruiters = await getRecruiters();
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <RecruiterProvider>{children}</RecruiterProvider>
+        <RecruiterProvider initialRecruiters={recruiters}>
+          {children}
+        </RecruiterProvider>
       </body>
     </html>
   );

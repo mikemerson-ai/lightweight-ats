@@ -3,28 +3,33 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
-export interface Recruiter {
-  id: string;
-  name: string;
-  title: string;
-  email: string;
-  created_at?: string;
-}
+import type { Recruiter } from "@/types/recruiters";
+import { DEFAULT_RECRUITERS } from "@/types/recruiters";
+export type { Recruiter };
 
 export async function getRecruiters(): Promise<Recruiter[]> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("recruiters")
-    .select("*")
-    .order("name", { ascending: true });
+    const { data, error } = await supabase
+      .from("recruiters")
+      .select("*")
+      .order("name", { ascending: true });
 
-  if (error) {
-    console.error("Error fetching recruiters:", error);
-    return [];
+    if (error) {
+      console.warn("Failed to fetch recruiters from database, using fallback:", error.message);
+      return DEFAULT_RECRUITERS;
+    }
+
+    if (!data || data.length === 0) {
+      return DEFAULT_RECRUITERS;
+    }
+
+    return data as Recruiter[];
+  } catch (err) {
+    console.warn("Error fetching recruiters, using fallback:", err);
+    return DEFAULT_RECRUITERS;
   }
-
-  return (data as Recruiter[]) ?? [];
 }
 
 export async function createRecruiter(data: {

@@ -1,7 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { getRecruiters, Recruiter } from "@/app/actions/recruiters";
+import { getRecruiters } from "@/app/actions/recruiters";
+import type { Recruiter } from "@/types/recruiters";
+import { DEFAULT_RECRUITERS } from "@/types/recruiters";
 
 interface RecruiterContextType {
   activeRecruiter: Recruiter | null;
@@ -15,34 +17,48 @@ const RecruiterContext = createContext<RecruiterContextType | undefined>(undefin
 
 const LOCAL_STORAGE_KEY = "rfcs_active_recruiter";
 
-export function RecruiterProvider({ children }: { children: React.ReactNode }) {
-  const [activeRecruiter, setActiveRecruiterState] = useState<Recruiter | null>(null);
-  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function RecruiterProvider({
+  children,
+  initialRecruiters = [],
+}: {
+  children: React.ReactNode;
+  initialRecruiters?: Recruiter[];
+}) {
+  const baseRecruiters = initialRecruiters.length > 0 ? initialRecruiters : DEFAULT_RECRUITERS;
+  const [recruiters, setRecruiters] = useState<Recruiter[]>(baseRecruiters);
+  const [activeRecruiter, setActiveRecruiterState] = useState<Recruiter | null>(
+    baseRecruiters.length > 0 ? baseRecruiters[0] : null,
+  );
+  const [isLoading, setIsLoading] = useState(initialRecruiters.length === 0 && DEFAULT_RECRUITERS.length === 0);
 
   const fetchRecruiters = async () => {
     try {
       const data = await getRecruiters();
-      setRecruiters(data);
-      return data;
+      if (data && data.length > 0) {
+        setRecruiters(data);
+        return data;
+      }
+      return baseRecruiters;
     } catch (error) {
       console.error("Failed to fetch recruiters", error);
-      return [];
+      return baseRecruiters;
     }
   };
 
   useEffect(() => {
     const init = async () => {
-      setIsLoading(true);
-      const data = await fetchRecruiters();
+      let currentList = recruiters;
+      if (currentList.length === 0) {
+        currentList = await fetchRecruiters();
+      }
 
-      if (data && data.length > 0) {
+      if (currentList && currentList.length > 0) {
         const storedRecruiterJson = localStorage.getItem(LOCAL_STORAGE_KEY);
-        let matchedRecruiter = null;
+        let matchedRecruiter: Recruiter | null = null;
         if (storedRecruiterJson) {
           try {
             const storedRecruiter = JSON.parse(storedRecruiterJson) as Recruiter;
-            matchedRecruiter = data.find((r) => r.id === storedRecruiter.id) || null;
+            matchedRecruiter = currentList.find((r) => r.id === storedRecruiter.id) || null;
           } catch (e) {
             console.error("Failed to parse stored recruiter", e);
           }
@@ -51,9 +67,8 @@ export function RecruiterProvider({ children }: { children: React.ReactNode }) {
         if (matchedRecruiter) {
           setActiveRecruiterState(matchedRecruiter);
         } else {
-          // Fallback to first active recruiter
-          setActiveRecruiterState(data[0]);
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data[0]));
+          setActiveRecruiterState(currentList[0]);
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentList[0]));
         }
       }
       setIsLoading(false);

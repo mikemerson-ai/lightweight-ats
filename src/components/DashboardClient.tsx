@@ -189,14 +189,19 @@ export function DashboardClient({
           <button
             type="button"
             onClick={() => setActiveNav("dsp_matching")}
-            className={`flex items-center gap-3 w-full px-3 py-2 rounded-md font-medium transition-colors cursor-pointer ${
+            className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium transition-all cursor-pointer ${
               activeNav === "dsp_matching"
-                ? "text-sky-800 bg-sky-50 font-bold border border-sky-200 shadow-2xs"
+                ? "text-sky-900 bg-sky-50 font-semibold border border-sky-200/80 shadow-2xs"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
-            <MapPin className="w-5 h-5 text-sky-600" />
-            📍 DSP Lead Matching
+            <div className="flex items-center gap-2.5 min-w-0">
+              <MapPin className={`w-4.5 h-4.5 shrink-0 ${activeNav === "dsp_matching" ? "text-sky-600" : "text-slate-400"}`} />
+              <span className="truncate text-sm">DSP Lead Matching</span>
+            </div>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200/60 shrink-0">
+              15 Homes
+            </span>
           </button>
           <button 
             type="button"
