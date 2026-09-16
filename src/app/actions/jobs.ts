@@ -43,19 +43,25 @@ export async function getJobs(): Promise<Job[]> {
 }
 
 export async function getActiveJobs(): Promise<Job[]> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .eq("status", "Active")
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("status", "Active")
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    throw new Error(error.message);
+    if (error) {
+      console.error("getActiveJobs error:", error);
+      return [];
+    }
+
+    return (data as Job[]) ?? [];
+  } catch (err) {
+    console.error("getActiveJobs exception:", err);
+    return [];
   }
-
-  return (data as Job[]) ?? [];
 }
 
 export async function createJob(formData: FormData): Promise<{ success: boolean; data?: Job; error?: string }> {

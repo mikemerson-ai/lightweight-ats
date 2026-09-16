@@ -10,6 +10,7 @@ import {
   type Candidate,
 } from "@/app/actions/candidates";
 import { createClient } from "@/lib/supabase/client";
+import type { Job } from "@/app/actions/jobs";
 import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import { DndContextWrapper } from "./DndContextWrapper";
 import { KanbanColumn } from "./KanbanColumn";
@@ -134,6 +135,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
 
 export interface KanbanBoardProps {
   jobId: string | null;
+  availableJobs?: Job[];
   searchQuery?: string;
   sourceFilter?: "all" | "inbound" | "outbound";
   temperatureFilter?: "all" | "hot" | "warm" | "cold" | "unset";
@@ -148,6 +150,7 @@ export interface KanbanBoardRef {
 
 export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function KanbanBoard({
   jobId,
+  availableJobs,
   searchQuery = "",
   sourceFilter = "all",
   temperatureFilter = "all",
@@ -428,11 +431,17 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
 
       <CandidateDetailDrawer
         candidate={selectedCandidate}
+        availableJobs={availableJobs}
         onClose={() => setSelectedCandidate(null)}
         onStageChange={(candidate, stage) => handleStageChange(candidate, stage)}
         onCandidateUpdated={(updated) => {
-          setSelectedCandidate(updated);
-          setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+          if (updated.job_id !== jobId) {
+            setSelectedCandidate(null);
+            setCandidates((prev) => prev.filter((c) => c.id !== updated.id));
+          } else {
+            setSelectedCandidate(updated);
+            setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+          }
         }}
       />
 

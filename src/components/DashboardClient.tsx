@@ -209,11 +209,11 @@ export function DashboardClient({
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-50/50 font-sans overflow-hidden">
       {/* Left Sidebar */}
-      <aside className="w-64 shrink-0 flex flex-col border-r border-slate-200 bg-white z-10 shadow-sm">
-        <div className="flex h-16 shrink-0 items-center px-6 border-b border-slate-100">
-          <h1 className="text-xl font-bold text-primary">Lightweight ATS</h1>
+      <aside className="w-64 shrink-0 flex flex-col border-r border-slate-200/60 bg-white z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+        <div className="flex h-16 shrink-0 items-center px-6">
+          <h1 className="text-xl font-bold text-primary tracking-tight">Lightweight ATS</h1>
         </div>
         
         <div className="p-4 border-b border-slate-100">
@@ -221,41 +221,53 @@ export function DashboardClient({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">Menu</div>
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3">Menu</div>
           <button
             type="button"
             onClick={() => setActiveNav("pipeline")}
-            className={`flex items-center gap-3 w-full px-3 py-2 rounded-md font-medium transition-colors cursor-pointer ${
+            className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-lg font-medium transition-all duration-200 cursor-pointer overflow-hidden ${
               activeNav === "pipeline"
-                ? "text-primary bg-primary/10 font-bold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "text-primary bg-primary/5 font-semibold"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
             }`}
           >
-            <LayoutGrid className="w-5 h-5" />
+            {activeNav === "pipeline" && (
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-md" />
+            )}
+            <LayoutGrid className={`w-5 h-5 ${activeNav === "pipeline" ? "text-primary" : "text-slate-400"}`} />
             Pipeline
           </button>
+          
           <button
             type="button"
             onClick={() => setActiveNav("dsp_matching")}
-            className={`flex items-center justify-between w-full px-3 py-2 rounded-lg font-medium transition-all cursor-pointer ${
+            className={`relative flex items-center justify-between w-full px-3 py-2.5 rounded-lg font-medium transition-all duration-200 cursor-pointer mt-1 overflow-hidden ${
               activeNav === "dsp_matching"
-                ? "text-sky-900 bg-sky-50 font-semibold border border-sky-200/80 shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "text-primary bg-primary/5 font-semibold"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
             }`}
           >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <MapPin className={`w-4.5 h-4.5 shrink-0 ${activeNav === "dsp_matching" ? "text-sky-600" : "text-slate-400"}`} />
-              <span className="truncate text-sm">DSP Lead Matching</span>
+            {activeNav === "dsp_matching" && (
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-md" />
+            )}
+            <div className="flex items-center gap-3 min-w-0">
+              <MapPin className={`w-5 h-5 shrink-0 ${activeNav === "dsp_matching" ? "text-primary" : "text-slate-400"}`} />
+              <span className="truncate">DSP Lead Matching</span>
             </div>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200/60 shrink-0">
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 transition-colors ${
+              activeNav === "dsp_matching" 
+                ? "bg-primary/10 text-primary" 
+                : "bg-slate-100 text-slate-500"
+            }`}>
               15 Homes
             </span>
           </button>
+          
           <button 
             type="button"
             onClick={() => setAnalyticsOpen(true)}
-            className="flex items-center gap-3 w-full px-3 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-md font-medium transition-colors cursor-pointer">
-            <BarChart3 className="w-5 h-5" />
+            className="relative flex items-center gap-3 w-full px-3 py-2.5 mt-1 rounded-lg font-medium transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 cursor-pointer">
+            <BarChart3 className="w-5 h-5 text-slate-400" />
             Analytics
           </button>
         </nav>
@@ -266,20 +278,10 @@ export function DashboardClient({
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-slate-50">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b bg-white px-6">
-          <div className="flex items-center gap-4">
-            {activeNav === "dsp_matching" ? (
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-600 text-white shadow-2xs">
-                  <MapPin className="h-4.5 w-4.5" />
-                </span>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900 leading-tight">DSP Lead Matching & Commute Engine</h2>
-                  <p className="text-xs text-slate-500">Live proximity ranking across 15 group homes</p>
-                </div>
-              </div>
-            ) : (
+      <div className="flex flex-1 flex-col overflow-hidden bg-slate-50/50">
+        {activeNav !== "dsp_matching" && (
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white px-6 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex items-center gap-4">
               <>
                 {jobs.length > 0 && (
                   <div className="flex items-center gap-2">
@@ -340,12 +342,11 @@ export function DashboardClient({
                   New Job
                 </button>
               </>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {activeNav === "pipeline" && (
-              <>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {activeNav === "pipeline" && (
+                <>
                 <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 p-0.5">
                   <button
                     type="button"
@@ -421,6 +422,7 @@ export function DashboardClient({
             </button>
           </div>
         </header>
+        )}
 
         <main className="flex-1 overflow-auto p-6">
           {activeNav === "dsp_matching" ? (
@@ -429,6 +431,7 @@ export function DashboardClient({
             <KanbanBoard
               ref={kanbanRef}
               jobId={selectedJobId}
+              availableJobs={jobs}
               searchQuery={searchQuery}
               sourceFilter={sourceFilter}
               temperatureFilter={temperatureFilter}

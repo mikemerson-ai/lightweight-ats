@@ -1465,59 +1465,69 @@ export async function transferCandidateJob(
   targetStage: string,
   recruiterName?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  // 1. Get the target job to log its title
-  const { data: targetJob, error: jobError } = await supabase
-    .from('jobs')
-    .select('title')
-    .eq('id', targetJobId)
-    .single();
+    // 1. Get the target job to log its title
+    const { data: targetJob, error: jobError } = await supabase
+      .from('jobs')
+      .select('title')
+      .eq('id', targetJobId)
+      .single();
 
-  if (jobError) {
-    return { success: false, error: "Target job not found" };
+    if (jobError || !targetJob) {
+      return { success: false, error: "Target job not found" };
+    }
+
+    // 2. Get the candidate's current job to log it
+    const { data: candidate, error: candidateError } = await supabase
+      .from('candidates')
+      .select('job_id, jobs(title)')
+      .eq('id', candidateId)
+      .single();
+
+    if (candidateError || !candidate) {
+      return { success: false, error: "Candidate not found" };
+    }
+
+    const candidateJobs = candidate.jobs as any;
+    const oldJobTitle = (Array.isArray(candidateJobs) ? candidateJobs[0]?.title : candidateJobs?.title) || "Unknown Job";
+
+    // 3. Update the candidate
+    // We set ai_summary and sub_scores to null so that they are re-evaluated against the new job
+    const { error: updateError } = await supabase
+      .from('candidates')
+      .update({ 
+        job_id: targetJobId, 
+        pipeline_stage: targetStage,
+        ai_summary: null,
+        sub_scores: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', candidateId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    // 4. Log the transfer
+    const notes = `Transferred from ${oldJobTitle} to ${targetJob.title}. Pipeline stage set to ${targetStage}.`;
+    
+    const { error: logError } = await supabase.from('activity_logs').insert({
+      candidate_id: candidateId,
+      activity_type: 'Job Transfer',
+      notes,
+      author_name: recruiterName || 'Recruiter',
+    });
+
+    if (logError) {
+      console.warn("Failed to log activity for job transfer:", logError.message);
+    }
+
+    revalidatePath('/');
+    return { success: true };
+  } catch (err: any) {
+    console.error("transferCandidateJob error:", err);
+    return { success: false, error: err?.message || "An unexpected error occurred during transfer." };
   }
-
-  // 2. Get the candidate's current job to log it
-  const { data: candidate, error: candidateError } = await supabase
-    .from('candidates')
-    .select('job_id, jobs(title)')
-    .eq('id', candidateId)
-    .single();
-
-  if (candidateError) {
-    return { success: false, error: "Candidate not found" };
-  }
-
-  const candidateJobs = candidate.jobs as any;
-  const oldJobTitle = (Array.isArray(candidateJobs) ? candidateJobs[0]?.title : candidateJobs?.title) || "Unknown Job";
-
-  // 3. Update the candidate
-  // We set ai_summary and sub_scores to null so that they are re-evaluated against the new job
-  const { error: updateError } = await supabase
-    .from('candidates')
-    .update({ 
-      job_id: targetJobId, 
-      pipeline_stage: targetStage,
-      ai_summary: null,
-      sub_scores: null
-    })
-    .eq('id', candidateId);
-
-  if (updateError) {
-    return { success: false, error: updateError.message };
-  }
-
-  // 4. Log the transfer
-  const notes = `Transferred from ${oldJobTitle} to ${targetJob.title}. Pipeline stage set to ${targetStage}.`;
-  
-  await supabase.from('activity_logs').insert({
-    candidate_id: candidateId,
-    activity_type: 'Job Transfer',
-    notes,
-    author_name: recruiterName || 'Recruiter',
-  });
-
-  revalidatePath('/');
-  return { success: true };
 }

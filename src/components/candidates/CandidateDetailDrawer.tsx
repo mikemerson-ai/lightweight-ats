@@ -46,6 +46,7 @@ import { ScorecardViewerModal } from "@/components/modals/ScorecardViewerModal";
 import { AiOutreachModal } from "@/components/modals/AiOutreachModal";
 import { Trash2, Sparkles, Briefcase } from "lucide-react";
 import JobTransferModal from "@/components/modals/JobTransferModal";
+import type { Job } from "@/app/actions/jobs";
 
 const STAGE_TITLES: Record<string, string> = {
   new_application: "New Application",
@@ -259,6 +260,7 @@ function DocumentCard({ doc, onRefresh, activeRecruiterName }: { doc: CandidateD
 
 interface CandidateDetailDrawerProps {
   candidate: Candidate | null;
+  availableJobs?: Job[];
   onClose: () => void;
   onStageChange?: (candidate: Candidate, stage: string) => void;
   onCandidateUpdated?: (candidate: Candidate) => void;
@@ -266,6 +268,7 @@ interface CandidateDetailDrawerProps {
 
 export function CandidateDetailDrawer({
   candidate,
+  availableJobs,
   onClose,
   onStageChange,
   onCandidateUpdated,
@@ -1721,11 +1724,14 @@ export function CandidateDetailDrawer({
           isOpen={showJobTransferModal}
           onClose={() => setShowJobTransferModal(false)}
           candidate={activeCandidate}
+          availableJobs={availableJobs}
           onTransferComplete={(updatedCand) => {
+            toast.success("Candidate transferred successfully");
             if (onCandidateUpdated) {
               onCandidateUpdated(updatedCand);
             }
             setShowJobTransferModal(false);
+            onClose();
           }}
         />
       )}
