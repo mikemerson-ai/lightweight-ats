@@ -170,12 +170,25 @@ export async function searchCandidates(query: string): Promise<Candidate[]> {
 
     if (error) {
       console.error("Search candidates error:", error);
+      console.error("Search candidates error details:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
       return [];
     }
 
     return (data as Candidate[]) ?? [];
   } catch (err: any) {
     console.error("Exception in searchCandidates:", err);
+    console.error("Exception details:", {
+      message: err?.message,
+      stack: err?.stack,
+      details: err?.details,
+      hint: err?.hint,
+      code: err?.code,
+    });
     return [];
   }
 }
