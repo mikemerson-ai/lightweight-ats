@@ -521,6 +521,7 @@ export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error("Supabase Error in getCandidatesByJob:", error);
     throw new Error(error.message);
   }
 

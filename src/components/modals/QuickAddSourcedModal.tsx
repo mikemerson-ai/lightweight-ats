@@ -7,7 +7,8 @@ import { SOURCING_CHANNELS, APPLIED_CHANNELS } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import { parseResumeAction } from "@/app/actions/resumeParser";
 import type { ParsedCandidate, SubScores } from "@/lib/gemini/parser";
-import { getJobs, type Job } from "@/app/actions/jobs";
+import { type Job } from "@/app/actions/jobs";
+import { createClient } from "@/lib/supabase/client";
 import { useRecruiter } from "@/context/RecruiterContext";
 import { SHIFT_OPTIONS } from "@/types/groupHomes";
 import { normalizeZipCode } from "@/lib/geo/commute";
@@ -62,11 +63,23 @@ export function QuickAddSourcedModal({
       if (defaultJobId) {
         setTargetJob(defaultJobId);
       }
-      getJobs()
-        .then((activeJobs) =>
-          setJobs(activeJobs.filter((job) => job.status === "Active")),
-        )
-        .catch(() => setJobs([]));
+      const fetchJobs = async () => {
+        try {
+          const supabase = createClient();
+          const { data, error } = await supabase
+            .from("jobs")
+            .select("*")
+            .eq("status", "Active")
+            .order("created_at", { ascending: false });
+          if (!error && data) {
+            setJobs(data as Job[]);
+          }
+        } catch (err) {
+          console.error("Error fetching jobs in modal:", err);
+          setJobs([]);
+        }
+      };
+      fetchJobs();
     }
   }, [open, defaultJobId]);
 

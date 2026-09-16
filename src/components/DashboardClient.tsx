@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Job, getJobs, deleteJob } from "@/app/actions/jobs";
+import { Job, deleteJob } from "@/app/actions/jobs";
+import { createClient } from "@/lib/supabase/client";
 import type { Candidate } from "@/app/actions/candidates";
 import { SearchBar } from "./search/SearchBar";
 import { QuickAddSourcedModal } from "./modals/QuickAddSourcedModal";
@@ -110,8 +111,14 @@ export function DashboardClient({
     return () => window.removeEventListener("popstate", handlePopState);
   }, [jobs]);
 
+  const fetchUpdatedJobs = async () => {
+    const supabase = createClient();
+    const { data } = await supabase.from("jobs").select("*").order("created_at", { ascending: false });
+    return (data as Job[]) || [];
+  };
+
   const handleJobCreated = async () => {
-    const updatedJobs = await getJobs();
+    const updatedJobs = await fetchUpdatedJobs();
     setJobs(updatedJobs);
     if (updatedJobs.length > 0) {
       changeSelectedJob(updatedJobs[0].id);
@@ -119,7 +126,7 @@ export function DashboardClient({
   };
 
   const handleJobUpdated = async () => {
-    const updatedJobs = await getJobs();
+    const updatedJobs = await fetchUpdatedJobs();
     setJobs(updatedJobs);
   };
 
@@ -133,7 +140,7 @@ export function DashboardClient({
     
     try {
       await deleteJob(selectedJobId, forceCascade);
-      const updatedJobs = await getJobs();
+      const updatedJobs = await fetchUpdatedJobs();
       setJobs(updatedJobs);
       changeSelectedJob(updatedJobs.length > 0 ? updatedJobs[0].id : null);
       setDeleteConfirmOpen(false);

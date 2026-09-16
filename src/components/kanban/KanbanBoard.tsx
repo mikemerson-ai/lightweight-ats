@@ -4,11 +4,11 @@ import { useEffect, useState, forwardRef, useImperativeHandle, useCallback } fro
 import { type DragEndEvent } from "@dnd-kit/core";
 import { Star, Sparkles, FileText } from "lucide-react";
 import {
-  getCandidatesByJob,
   updateCandidateStage,
   getCandidateById,
   type Candidate,
 } from "@/app/actions/candidates";
+import { createClient } from "@/lib/supabase/client";
 import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import { DndContextWrapper } from "./DndContextWrapper";
 import { KanbanColumn } from "./KanbanColumn";
@@ -163,10 +163,21 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
 
   const loadCandidates = useCallback(async (targetId: string) => {
     try {
-      const data = await getCandidatesByJob(targetId);
-      setCandidates(data);
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("candidates")
+        .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+        .eq("job_id", targetId)
+        .order("created_at", { ascending: false });
+        
+      if (error) {
+        console.error("Client Supabase Error:", error);
+        throw error;
+      }
+      setCandidates((data as Candidate[]) || []);
       setLoadedJobId(targetId);
-    } catch {
+    } catch (err) {
+      console.error("Error loading candidates in Kanban:", err);
       setCandidates([]);
       setLoadedJobId(targetId);
     }
