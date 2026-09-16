@@ -1,1 +1,0 @@
-import { searchCandidates } from "@/app/actions/candidates"; import { NextResponse } from "next/server"; export async function GET() { try { const data = await searchCandidates("devon"); return NextResponse.json(data); } catch (e) { return NextResponse.json({ error: e.message, stack: e.stack }, { status: 500 }); } }
