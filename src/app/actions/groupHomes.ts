@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { GroupHome } from "@/types/groupHomes";
 
-export const DEFAULT_GROUP_HOMES: GroupHome[] = [
+const DEFAULT_GROUP_HOMES: GroupHome[] = [
   { id: "gh-1", name: "60th St", address: "1711 North 60th Street", city: "Philadelphia", state: "PA", zip_code: "19151", is_active: true },
   { id: "gh-2", name: "Carrol St", address: "2526 Carrol St", city: "Philadelphia", state: "PA", zip_code: "19142", is_active: true },
   { id: "gh-3", name: "Muhfeld St", address: "2607 S Muhfeld St", city: "Philadelphia", state: "PA", zip_code: "19142", is_active: true },

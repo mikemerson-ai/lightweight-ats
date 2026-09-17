@@ -1,12 +1,14 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { CandidateDocument } from "@/types/documents";
 import { parseResumeData, type ParsedCandidate } from "@/lib/gemini/parser";
 
 import { SourcingChannel } from "@/lib/constants";
 import type { Evaluation } from "@/types/evaluations";
+import { extractZipCode } from "@/lib/geo/commute";
 
 const HIRED_STAGE = "hired";
 const DISQUALIFIED_STAGE = "disqualified";
@@ -179,7 +181,7 @@ export async function searchCandidates(query: string): Promise<Candidate[]> {
       return [];
     }
 
-    return (data as Candidate[]) ?? [];
+    return JSON.parse(JSON.stringify(data ?? [])) as Candidate[];
   } catch (err: any) {
     console.error("Exception in searchCandidates:", err);
     console.error("Exception details:", {
@@ -448,7 +450,7 @@ export async function quickAddSourcedCandidate(
     if (data.sub_scores) insertPayload.sub_scores = data.sub_scores;
     if (data.resume_url) insertPayload.resume_url = data.resume_url;
     if (data.resume_storage_path) insertPayload.resume_storage_path = data.resume_storage_path;
-    if (data.zip_code) insertPayload.zip_code = data.zip_code.trim();
+    insertPayload.zip_code = data.zip_code?.trim() || extractZipCode(data.address) || null;
     if (data.shift_preferences && data.shift_preferences.length > 0) {
       insertPayload.shift_preferences = data.shift_preferences;
     }
@@ -712,6 +714,7 @@ export async function uploadCandidateResume(
   formData: FormData
 ): Promise<UploadResumeResult> {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const file = formData.get("file") as File | null;
   const authorName = (formData.get("authorName") as string) || "Recruiter";
 
@@ -729,7 +732,7 @@ export async function uploadCandidateResume(
 
     if (candidate?.resume_storage_path) {
       try {
-        await supabase.storage.from("resumes").remove([candidate.resume_storage_path]);
+        await adminSupabase.storage.from("resumes").remove([candidate.resume_storage_path]);
       } catch (e) {
         console.warn("Could not remove previous resume from storage:", e);
       }
@@ -740,7 +743,7 @@ export async function uploadCandidateResume(
     const filePath = `${candidateId}/${Date.now()}_${cleanFileName}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await adminSupabase.storage
       .from("resumes")
       .upload(filePath, fileBuffer, {
         contentType: file.type || "application/pdf",
@@ -752,7 +755,7 @@ export async function uploadCandidateResume(
     }
 
     // 3. Get public URL
-    const { data: { publicUrl } } = supabase.storage.from("resumes").getPublicUrl(filePath);
+    const { data: { publicUrl } } = adminSupabase.storage.from("resumes").getPublicUrl(filePath);
 
     // 4. Update candidate record in DB
     const updatePayload: Record<string, any> = {
@@ -1068,6 +1071,9 @@ export async function updateDuplicateCandidateResume(
     updateData.phone = ["not provided", "not available", "n/a"].includes(parsedData.phone.trim().toLowerCase()) ? null : parsedData.phone.trim();
   }
   if (parsedData.address) updateData.address = parsedData.address;
+  if (parsedData.zip_code || parsedData.address) {
+    updateData.zip_code = parsedData.zip_code?.trim() || extractZipCode(parsedData.address) || null;
+  }
   if (parsedData.primarySkills && parsedData.primarySkills.length > 0) {
     updateData.primary_skills = parsedData.primarySkills.join(", ");
   }
@@ -1192,6 +1198,10 @@ export async function reEvaluateCandidateFit(
     if (parsedData.subScores) {
       updatePayload.sub_scores = parsedData.subScores;
     }
+    if (parsedData.address) updatePayload.address = parsedData.address;
+    if (parsedData.zip_code || parsedData.address) {
+      updatePayload.zip_code = parsedData.zip_code?.trim() || extractZipCode(parsedData.address) || null;
+    }
 
     let { data: updatedCandidate, error: updateError } = await supabase
       .from("candidates")
@@ -1301,7 +1311,7 @@ export async function bulkAddCandidates(
         email: emailVal,
         phone: phoneVal,
         address: data.address,
-        zip_code: data.zip_code?.trim() || null,
+        zip_code: data.zip_code?.trim() || extractZipCode(data.address) || null,
         shift_preferences: data.shift_preferences || [],
         primary_skills: data.primary_skills,
         years_of_experience: data.years_of_experience,
@@ -1372,6 +1382,9 @@ export async function bulkAddCandidates(
             if (data.last_name) updatePayload.last_name = data.last_name;
             if (data.phone) updatePayload.phone = data.phone;
             if (data.address) updatePayload.address = data.address;
+            if (data.address || data.zip_code) {
+              updatePayload.zip_code = data.zip_code?.trim() || extractZipCode(data.address) || null;
+            }
             if (data.primary_skills) updatePayload.primary_skills = data.primary_skills;
             if (typeof data.years_of_experience === "number") updatePayload.years_of_experience = data.years_of_experience;
             if (data.ai_summary) updatePayload.ai_summary = data.ai_summary;
@@ -1454,7 +1467,30 @@ export async function bulkAddCandidates(
 }
 
 /**
- * Fetch all candidates for DSP Proximity and Lead Matching view.
+ * Job titles that qualify as caregiving roles for the DSP Proximity view.
+ * Only Direct Support Professional (DSP) and Home Health Aide (HHA) roles are
+ * included. Everything else (Trainer, administrative, and other non-caregiver
+ * roles) is excluded from this view and its metrics.
+ */
+const DSP_HHA_JOB_TITLE_MATCHES = [
+  "direct support professional",
+  "home health aide",
+  "dsp",
+  "hha",
+] as const;
+
+function isDspOrHhaJobTitle(title: string | null | undefined): boolean {
+  const normalized = (title ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return DSP_HHA_JOB_TITLE_MATCHES.some((match) => {
+    if (normalized === match) return true;
+    return new RegExp(`(^|[^a-z0-9])${match}([^a-z0-9]|$)`).test(normalized);
+  });
+}
+
+/**
+ * Fetch candidates for the DSP Proximity and Lead Matching view, restricted to
+ * Direct Support Professional (DSP) and Home Health Aide (HHA) roles only.
  */
 export async function getDspCandidates(): Promise<Candidate[]> {
   try {
@@ -1469,7 +1505,10 @@ export async function getDspCandidates(): Promise<Candidate[]> {
       return [];
     }
 
-    return (data as Candidate[]) ?? [];
+    const candidates = (data as Candidate[]) ?? [];
+    return candidates.filter((candidate) =>
+      isDspOrHhaJobTitle(candidate.jobs?.title),
+    );
   } catch (err) {
     console.error("Error in getDspCandidates:", err);
     return [];

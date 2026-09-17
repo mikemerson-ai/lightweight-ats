@@ -13,6 +13,16 @@ export function normalizeZipCode(zip: string | number | null | undefined): strin
 }
 
 /**
+ * Programmatically extracts a US postal code from a free-form address string.
+ * Supports both 5-digit and ZIP+4 formats (e.g., "19124" or "19124-1234").
+ */
+export function extractZipCode(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const match = String(address).match(/\b\d{5}(?:-\d{4})?\b/);
+  return match ? match[0] : null;
+}
+
+/**
  * Haversine formula calculation in miles between two latitude/longitude points.
  */
 export function haversineDistance(

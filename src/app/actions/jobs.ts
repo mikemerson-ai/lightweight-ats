@@ -39,7 +39,8 @@ export async function getJobs(): Promise<Job[]> {
     throw new Error(error.message);
   }
 
-  return (data as Job[]) ?? [];
+  const jobs = (data as Job[]) ?? [];
+  return jobs.sort((a, b) => a.title.localeCompare(b.title));
 }
 
 export async function getActiveJobs(): Promise<Job[]> {

@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { extractZipCode } from '@/lib/geo/commute';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -20,6 +21,7 @@ export interface ParsedCandidate {
   email: string;
   phone: string;
   address: string;
+  zip_code?: string | null;
   primarySkills: string[];
   yearsOfExperience: number;
   fitSummary: string;
@@ -42,6 +44,10 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
       email: { type: Type.STRING },
       phone: { type: Type.STRING },
       address: { type: Type.STRING },
+      zip_code: {
+        type: Type.STRING,
+        description: "The candidate's 5-digit US postal code, extracted as a separate string even when it also appears inside the address. Return an empty string if no ZIP code is present.",
+      },
       primarySkills: {
         type: Type.ARRAY,
         items: { type: Type.STRING }
@@ -84,7 +90,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         }
       }
     },
-    required: ["firstName", "lastName", "email", "phone", "address", "primarySkills", "yearsOfExperience", "fitSummary", "fitRating"]
+    required: ["firstName", "lastName", "email", "phone", "address", "zip_code", "primarySkills", "yearsOfExperience", "fitSummary", "fitRating"]
   };
 
   let contents: any[];
@@ -96,6 +102,8 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
   } else {
     instructions += "\n\nParse the attached resume document and extract the candidate information according to the schema.";
   }
+
+  instructions += "\n\nZIP CODE EXTRACTION RULE: Always extract the candidate's 5-digit U.S. postal ZIP code into the separate `zip_code` field, even if it is also present inside the main address string (e.g., \"Philadelphia, PA 19124\" or a dedicated ZIP/Postal Code line). If no ZIP code can be found anywhere, return an empty string.";
 
   if (typeof payload === 'string') {
     contents = [
@@ -135,6 +143,9 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     const parsed = JSON.parse(response.text) as ParsedCandidate;
     if (typeof payload === 'string' && !parsed.rawResumeText) {
       parsed.rawResumeText = payload;
+    }
+    if (!parsed.zip_code && parsed.address) {
+      parsed.zip_code = extractZipCode(parsed.address);
     }
     return parsed;
   } catch (err) {

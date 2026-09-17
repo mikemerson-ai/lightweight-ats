@@ -181,15 +181,33 @@ You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is 
     ];
   }
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.6-flash',
-    contents: contents,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: schema,
-      temperature: 0.1,
+  const generateWithModel = (model: string) =>
+    ai.models.generateContent({
+      model,
+      contents: contents,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.1,
+      }
+    });
+
+  let response;
+  try {
+    response = await generateWithModel('gemini-3.6-flash');
+  } catch (error: unknown) {
+    const status = (error as { status?: number })?.status;
+    const code = (error as { code?: number | string })?.code;
+    const message = error instanceof Error ? error.message : String(error);
+    const is503 = status === 503 || code === 503 || message.includes('503');
+
+    if (is503) {
+      console.warn('503 caught on 3.6 Flash. Falling back to 3.5 Flash...');
+      response = await generateWithModel('gemini-3.5-flash');
+    } else {
+      throw error;
     }
-  });
+  }
 
   const responseText = response.text || '';
   if (!responseText) {

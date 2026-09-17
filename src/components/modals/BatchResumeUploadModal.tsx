@@ -374,6 +374,7 @@ export function BatchResumeUploadModal({
         email: data.email,
         phone: data.phone,
         address: data.address,
+        zip_code: data.zip_code || undefined,
         primary_skills: data.primarySkills?.join(", "),
         years_of_experience: data.yearsOfExperience,
         ai_summary: data.fitSummary,

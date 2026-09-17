@@ -75,6 +75,7 @@ export async function getAnalyticsData(
 
   const funnelStages = [
     "new_application",
+    "reviewing",
     "screening",
     "interview",
     "completing_requirements",

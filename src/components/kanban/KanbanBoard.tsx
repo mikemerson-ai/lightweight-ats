@@ -116,6 +116,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     title: "New Application",
     accent: "bg-secondary",
   },
+  { key: "reviewing", title: "Reviewing", accent: "bg-secondary" },
   { key: "screening", title: "Screening", accent: "bg-secondary" },
   { key: "interview", title: "Interview", accent: "bg-secondary" },
   {

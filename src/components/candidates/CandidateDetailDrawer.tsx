@@ -50,6 +50,7 @@ import type { Job } from "@/app/actions/jobs";
 
 const STAGE_TITLES: Record<string, string> = {
   new_application: "New Application",
+  reviewing: "Reviewing",
   screening: "Screening",
   interview: "Interview",
   completing_requirements: "Completing Requirements",

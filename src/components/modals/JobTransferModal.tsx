@@ -178,7 +178,7 @@ export default function JobTransferModal({
                 <select
                   value={selectedJobId}
                   onChange={(e) => setSelectedJobId(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
                 >
                   <option value="" disabled>Select a new job...</option>
                   {jobs.map((job) => (
@@ -198,7 +198,7 @@ export default function JobTransferModal({
               <select
                 value={selectedStage}
                 onChange={(e) => setSelectedStage(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+                className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
               >
                 {PIPELINE_STAGES.map((stage) => (
                   <option key={stage.key} value={stage.key}>

@@ -34,6 +34,7 @@ import { CandidateDetailDrawer } from "@/components/candidates/CandidateDetailDr
 
 const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   new_application: { label: "New App", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  reviewing: { label: "Reviewing", color: "bg-cyan-50 text-cyan-700 border-cyan-200" },
   screening: { label: "Screening", color: "bg-purple-50 text-purple-700 border-purple-200" },
   interview: { label: "Interview", color: "bg-amber-50 text-amber-700 border-amber-200" },
   completing_requirements: { label: "Requirements", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
@@ -404,7 +405,7 @@ export function DspLeadMatchingView() {
           <div className="mt-1 text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">
             {stats.total}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5 truncate">Entire applicant pool</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">DSP & HHA roles only</div>
         </div>
 
         {/* Within Radius Filter Card */}
@@ -582,6 +583,7 @@ export function DspLeadMatchingView() {
             >
               <option value="all">All Pipeline Stages</option>
               <option value="new_application">New Application</option>
+              <option value="reviewing">Reviewing</option>
               <option value="screening">Screening</option>
               <option value="interview">Interview</option>
               <option value="completing_requirements">Completing Requirements</option>

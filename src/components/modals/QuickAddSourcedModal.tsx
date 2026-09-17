@@ -73,7 +73,10 @@ export function QuickAddSourcedModal({
             .eq("status", "Active")
             .order("created_at", { ascending: false });
           if (!error && data) {
-            setJobs(data as Job[]);
+            const sortedJobs = (data as Job[]).sort((a, b) =>
+              a.title.localeCompare(b.title),
+            );
+            setJobs(sortedJobs);
           }
         } catch (err) {
           console.error("Error fetching jobs in modal:", err);
@@ -149,7 +152,7 @@ export function QuickAddSourcedModal({
     if (data.phone) setPhone(data.phone);
     if (data.address) {
       setAddress(data.address);
-      const parsedZip = normalizeZipCode(data.address);
+      const parsedZip = data.zip_code?.trim() || normalizeZipCode(data.address);
       if (parsedZip) setZipCode(parsedZip);
     }
     if (data.primarySkills?.length) {
@@ -223,6 +226,7 @@ export function QuickAddSourcedModal({
         email,
         phone,
         address,
+        zip_code: zipCode?.trim() || undefined,
         primarySkills: primarySkills ? primarySkills.split(",").map(s => s.trim()) : [],
         fitSummary: aiSummary,
         fitRating: fitRating ?? 0,
