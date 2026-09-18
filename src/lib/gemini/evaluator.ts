@@ -205,27 +205,35 @@ export async function evaluateResumeAgainstJD(
     throw new Error('FATAL: Missing jobTitle or jobDescription for resume evaluation.');
   }
 
-  const systemInstructions = `# Role & Purpose
+  const systemInstructions = `<Role>
 You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is to objectively evaluate candidate resumes against a provided Job Description (JD) and produce an unbiased, evidence-backed evaluation scorecard.
+</Role>
 
-# Operational Principles
-1. **Zero Hallucination with Semantic Equivalency:** Evaluate skills and tools strictly based on the resume. You may apply semantic equivalencies (e.g., AWS EC2 = Cloud Computing) if widely recognized, but you MUST explicitly justify the inference in your evaluation.
-2. **Skill Depth vs. Keyword Dropping:** Do not merely check if a required skill is mentioned. Evaluate the context: was it a core part of a major project delivering impact, or just buried in a comma-separated list at the bottom?
-3. **Tenure Stability Analysis:** Analyze the candidate's average job tenure. Explicitly flag patterns of job-hopping (multiple stints under 1 year) in the red flags section.
-4. **Impact over Buzzwords:** Prioritize candidates whose achievements reflect scope, metric-driven business outcomes (CAR/STAR/XYZ framework), and clear organizational ownership.
+<OperationalPrinciples>
+1. ZERO HALLUCINATION: Evaluate skills strictly based on the resume text. 
+2. SEMANTIC EQUIVALENCY: Apply industry-standard semantic equivalencies (e.g., AWS EC2 = Cloud Computing), but explicitly justify this inference in your evaluation evidence.
+3. SKILL DEPTH: Do not merely check if a required skill is mentioned. Evaluate context: was it a core part of a major project delivering impact, or just buried in a list?
+4. TENURE STABILITY: Explicitly flag patterns of job-hopping (e.g., multiple stints under 1 year) in the red flags.
+5. IMPACT OVER BUZZWORDS: Prioritize candidates whose achievements reflect scope, metric-driven business outcomes, and clear ownership.
+</OperationalPrinciples>
 
-# Input Context
-- Target Job Title: ${jobContext.title}
-- Target Job Description: ${jobContext.description}
-- Target Job Requirements: ${jobContext.requirements || 'Standard requirements as outlined in description'}
+<InputContext>
+Target Job Title: ${jobContext.title}
+Target Job Description: ${jobContext.description}
+Target Job Requirements: ${jobContext.requirements || 'Standard requirements as outlined in description'}
+</InputContext>
 
-# Evaluation Rubric
-- recommendation must be one of: "STRONG PURSUE", "CONDITIONAL SCREEN", "DO NOT ADVANCE".
-- fitScore must be an integer between 0 and 100.
-- hardGates: 3 to 5 core non-negotiable requirements evaluated with exact evidence/quotes.
-- experienceImpact: assess quantified outcomes, seniority alignment, and career trajectory.
-- redFlags: list 1-3 specific gaps or flags.
-- interviewProbes: 2-3 targeted recruiter screening drill-down questions.`;
+<Task>
+Generate a structured evaluation matching the requested JSON schema.
+- Evaluate 3 to 5 core non-negotiable requirements for the 'hardGates', using direct quotes from the resume as evidence.
+- Assess quantified outcomes, seniority alignment, and career trajectory for the 'experienceImpact'.
+- Formulate 2-3 targeted recruiter screening drill-down questions ('interviewProbes') to probe ambiguities or partial matches.
+
+SCORING CALIBRATION:
+- 90-100: Exceptional match (STRONG PURSUE). Meets all hard gates with high impact.
+- 70-89: Solid match with minor gaps (CONDITIONAL SCREEN).
+- Below 70: Significant gaps or red flags (DO NOT ADVANCE).
+</Task>`;
 
   const schema = {
     type: Type.OBJECT,
@@ -315,11 +323,11 @@ You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is 
   let structured: RawScorecard;
 
   try {
-    console.log('Attempting Pass 2 Evaluation with OpenRouter (Analytical)...');
-    structured = await generateViaOpenRouter(systemInstructions, payload, new Error('OpenRouter Init'));
-  } catch (openRouterError) {
-    console.warn('OpenRouter failed or queued too long. Falling back to Gemini 3.5 Flash Lite...', openRouterError);
+    console.log('Attempting Pass 2 Evaluation with Gemini 3.5 Flash Lite...');
     structured = parseGeminiResponse(await generateWithModel('gemini-3.5-flash-lite'));
+  } catch (geminiError) {
+    console.warn('Gemini failed. Falling back to OpenRouter (Analytical)...', geminiError);
+    structured = await generateViaOpenRouter(systemInstructions, payload, geminiError);
   }
 
   let recommendation: ScorecardRecommendation = 'UNKNOWN';
