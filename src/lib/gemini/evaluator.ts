@@ -92,19 +92,6 @@ function buildScorecardMarkdown(structured: RawScorecard, targetRole: string): s
   return md;
 }
 
-function is503Error(error: unknown): boolean {
-  const status = (error as { status?: number } | null)?.status;
-  const code = (error as { code?: number | string } | null)?.code;
-  const message = error instanceof Error ? error.message : String(error);
-  const lower = message.toLowerCase();
-  return (
-    status === 503 ||
-    code === 503 ||
-    lower.includes('503') ||
-    lower.includes('overloaded')
-  );
-}
-
 function parseGeminiResponse(response: { text?: string } | undefined): RawScorecard {
   const responseText = response?.text || '';
   if (!responseText) {
@@ -332,15 +319,12 @@ You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is 
   try {
     structured = parseGeminiResponse(await generateWithModel('gemini-3.6-flash'));
   } catch (primaryError) {
-    if (!is503Error(primaryError)) {
-      throw primaryError;
-    }
-    console.warn('503 caught on 3.6 Flash. Falling back to 3.5 Flash...');
+    console.warn('3.6 Flash failed. Falling back to 3.5 Flash...', primaryError);
 
     try {
       structured = parseGeminiResponse(await generateWithModel('gemini-3.5-flash'));
     } catch (secondaryError) {
-      console.warn('Gemini unavailable (503). Successfully fell back to OpenRouter free models.');
+      console.warn('Gemini unavailable. Successfully fell back to OpenRouter models.', secondaryError);
       structured = await generateViaOpenRouter(systemInstructions, payload, secondaryError);
     }
   }
