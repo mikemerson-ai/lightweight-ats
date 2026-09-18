@@ -209,9 +209,10 @@ export async function evaluateResumeAgainstJD(
 You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is to objectively evaluate candidate resumes against a provided Job Description (JD) and produce an unbiased, evidence-backed evaluation scorecard.
 
 # Operational Principles
-1. **Zero Hallucination:** Only evaluate skills, tools, and experiences explicitly documented in the resume. If an item is not mentioned, score it as "Not Evident" or "Missing".
-2. **Impact over Buzzwords:** Prioritize candidates whose achievements reflect scope, metric-driven business outcomes (CAR/STAR/XYZ framework), and clear organizational ownership.
-3. **No Inference of Equivalency:** Do not assume a candidate knows a core required tool simply because they know a tangential framework, unless explicitly stated.
+1. **Zero Hallucination with Semantic Equivalency:** Evaluate skills and tools strictly based on the resume. You may apply semantic equivalencies (e.g., AWS EC2 = Cloud Computing) if widely recognized, but you MUST explicitly justify the inference in your evaluation.
+2. **Skill Depth vs. Keyword Dropping:** Do not merely check if a required skill is mentioned. Evaluate the context: was it a core part of a major project delivering impact, or just buried in a comma-separated list at the bottom?
+3. **Tenure Stability Analysis:** Analyze the candidate's average job tenure. Explicitly flag patterns of job-hopping (multiple stints under 1 year) in the red flags section.
+4. **Impact over Buzzwords:** Prioritize candidates whose achievements reflect scope, metric-driven business outcomes (CAR/STAR/XYZ framework), and clear organizational ownership.
 
 # Input Context
 - Target Job Title: ${jobContext.title}
@@ -314,16 +315,11 @@ You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is 
   let structured: RawScorecard;
 
   try {
-    structured = parseGeminiResponse(await generateWithModel('gemini-3.6-flash'));
-  } catch (primaryError) {
-    console.warn('3.6 Flash failed. Falling back to 3.5 Flash...', primaryError);
-
-    try {
-      structured = parseGeminiResponse(await generateWithModel('gemini-3.5-flash'));
-    } catch (secondaryError) {
-      console.warn('Gemini unavailable. Successfully fell back to OpenRouter models.', secondaryError);
-      structured = await generateViaOpenRouter(systemInstructions, payload, secondaryError);
-    }
+    console.log('Attempting Pass 2 Evaluation with OpenRouter (Analytical)...');
+    structured = await generateViaOpenRouter(systemInstructions, payload, new Error('OpenRouter Init'));
+  } catch (openRouterError) {
+    console.warn('OpenRouter failed or queued too long. Falling back to Gemini 3.5 Flash Lite...', openRouterError);
+    structured = parseGeminiResponse(await generateWithModel('gemini-3.5-flash-lite'));
   }
 
   let recommendation: ScorecardRecommendation = 'UNKNOWN';

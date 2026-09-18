@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { X, Copy, Check, Sparkles, Upload, Loader2, AlertCircle, ShieldAlert, CheckCircle2, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { type Candidate, uploadCandidateResume } from "@/app/actions/candidates";
 import { generateCandidateScorecard } from "@/app/actions/generateScorecard";
 import { useRecruiter } from "@/context/RecruiterContext";
@@ -23,6 +24,8 @@ export function ScorecardViewerModal({
 }: ScorecardViewerModalProps) {
   const [markdown, setMarkdown] = useState<string>(existingMarkdown || "");
   const [loading, setLoading] = useState(false);
+  const [evaluatingFileName, setEvaluatingFileName] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [showUpload, setShowUpload] = useState(false);
@@ -31,19 +34,22 @@ export function ScorecardViewerModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [prevCandidateId, setPrevCandidateId] = useState<string | undefined>(candidate?.id);
+  const [prevExistingMarkdown, setPrevExistingMarkdown] = useState<string | null | undefined>(existingMarkdown);
 
   const { activeRecruiter } = useRecruiter();
 
-  // Sync markdown if candidate changes or existingMarkdown changes
+  // Sync markdown if candidate changes or existingMarkdown changes externally
   if (candidate?.id !== prevCandidateId) {
     setPrevCandidateId(candidate?.id);
+    setPrevExistingMarkdown(existingMarkdown);
     setMarkdown(existingMarkdown || "");
     setError("");
     setShowUpload(false);
     setSelectedFile(null);
     setViewMode("rendered");
-  } else if (existingMarkdown && existingMarkdown !== markdown && !loading) {
-    setMarkdown(existingMarkdown);
+  } else if (existingMarkdown !== prevExistingMarkdown && !loading) {
+    setPrevExistingMarkdown(existingMarkdown);
+    setMarkdown(existingMarkdown || "");
   }
 
   if (!open || !candidate) {
@@ -60,6 +66,7 @@ export function ScorecardViewerModal({
   async function handleGenerate(fileToUse?: File) {
     if (!candidate) return;
     setLoading(true);
+    setEvaluatingFileName(fileToUse ? fileToUse.name : null);
     setError("");
 
     try {
@@ -87,19 +94,61 @@ export function ScorecardViewerModal({
       const result = await generateCandidateScorecard(formData);
       if (result.success && result.scorecard) {
         setMarkdown(result.scorecard.markdown);
+        setPrevExistingMarkdown(result.scorecard.markdown);
         setShowUpload(false);
         setSelectedFile(null);
+        toast.success(
+          fileToUse
+            ? `Scorecard re-evaluated successfully with ${fileToUse.name}!`
+            : "Scorecard generated successfully!"
+        );
         if (onScorecardGenerated) {
           onScorecardGenerated(result.scorecard.markdown, updatedCandidate);
         }
       } else {
-        setError(result.error || "Failed to generate evaluation scorecard.");
+        const errMsg = result.error || "Failed to generate evaluation scorecard.";
+        setError(errMsg);
+        toast.error(errMsg);
       }
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const errMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
+      setEvaluatingFileName(null);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!loading) {
+      setIsDragging(true);
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (loading) return;
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      const isAllowed = file.name.endsWith(".pdf") || file.name.endsWith(".docx") || file.type.includes("pdf") || file.type.includes("word");
+      if (!isAllowed) {
+        toast.error("Please upload a PDF or DOCX resume document.");
+        return;
+      }
+      handleGenerate(file);
     }
   }
 
@@ -319,8 +368,37 @@ export function ScorecardViewerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col rounded-2xl bg-slate-50 shadow-2xl overflow-hidden border border-slate-200">
+        
+        {/* Drag & Drop Overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/85 text-white backdrop-blur-xs rounded-2xl border-2 border-dashed border-secondary p-6 transition-all">
+            <Upload className="h-12 w-12 text-secondary animate-bounce mb-3" />
+            <p className="text-base font-bold">Drop New Resume Document Here</p>
+            <p className="text-xs text-slate-300 mt-1">Supports PDF and Word formats up to 10MB to re-evaluate scorecard</p>
+          </div>
+        )}
+
+        {/* Global File Input for Re-evaluation / Attach */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              handleGenerate(file);
+            }
+            e.target.value = "";
+          }}
+        />
         
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
@@ -434,9 +512,13 @@ export function ScorecardViewerModal({
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Loader2 className="h-10 w-10 animate-spin text-secondary mb-4" />
-              <h4 className="text-base font-semibold text-primary">Evaluating Candidate with Gemini...</h4>
+              <h4 className="text-base font-semibold text-primary">
+                {evaluatingFileName ? `Re-evaluating with ${evaluatingFileName}...` : "Evaluating Candidate with Gemini..."}
+              </h4>
               <p className="text-xs text-slate-500 max-w-sm mt-1">
-                Deconstructing job hard gates, analyzing quantified impact, checking red flags, and drafting recruiter interview probes.
+                {evaluatingFileName
+                  ? "Parsing new resume evidence, checking hard gate requirements, and regenerating scorecard."
+                  : "Deconstructing job hard gates, analyzing quantified impact, checking red flags, and drafting recruiter interview probes."}
               </p>
             </div>
           ) : markdown ? (
@@ -470,8 +552,9 @@ export function ScorecardViewerModal({
 
                 <button
                   type="button"
-                  onClick={() => setShowUpload(!showUpload)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
                 >
                   <Upload className="h-4 w-4 text-slate-500" />
                   Attach / Update Resume First
@@ -506,18 +589,6 @@ export function ScorecardViewerModal({
                   {selectedFile ? selectedFile.name : "Click to select PDF or DOCX resume"}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">Supports PDF and Word formats up to 10MB</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setSelectedFile(file);
-                    }
-                  }}
-                />
               </div>
 
               {selectedFile && (
@@ -543,11 +614,16 @@ export function ScorecardViewerModal({
             {markdown && (
               <button
                 type="button"
-                onClick={() => setShowUpload(!showUpload)}
-                className="text-xs font-medium text-slate-600 hover:text-primary transition flex items-center gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                className="text-xs font-semibold text-slate-700 hover:text-primary transition flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 cursor-pointer shadow-xs"
               >
-                <Upload className="h-3.5 w-3.5" />
-                Re-evaluate with New Document
+                {loading && evaluatingFileName ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-secondary" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5 text-slate-500" />
+                )}
+                {loading && evaluatingFileName ? "Re-evaluating..." : "Re-evaluate with New Document"}
               </button>
             )}
           </div>

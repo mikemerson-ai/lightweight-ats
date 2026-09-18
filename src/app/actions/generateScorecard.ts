@@ -4,6 +4,7 @@ import mammoth from 'mammoth';
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { evaluateResumeAgainstJD, type ScorecardResult } from '@/lib/gemini/evaluator';
+import { parseResumeData } from '@/lib/gemini/parser';
 
 export interface GenerateScorecardResult {
   success: boolean;
@@ -45,17 +46,46 @@ export async function generateCandidateScorecard(formData: FormData): Promise<Ge
     // 2. Prepare resume payload (File, Direct text, or Profile History fallback)
     let payload: File | string;
 
-    if (file && file instanceof File && file.size > 0) {
-      const fileType = file.type;
-      const isDocx = fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx');
+    const isFileValid = file && typeof file === 'object' && 'size' in file && (file as any).size > 0 && typeof (file as any).arrayBuffer === 'function';
+
+    if (isFileValid) {
+      const fileObj = file as File;
+      const fileType = fileObj.type || '';
+      const fileName = fileObj.name || '';
+      const isDocx = fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileName.toLowerCase().endsWith('.docx');
 
       if (isDocx) {
-        const buffer = Buffer.from(await file.arrayBuffer());
+        const buffer = Buffer.from(await fileObj.arrayBuffer());
         const result = await mammoth.extractRawText({ buffer });
         payload = result.value;
       } else {
-        payload = file;
+        payload = fileObj;
       }
+
+      // Re-evaluation Pass 1: Parse data and update profile
+      const parsedData = await parseResumeData(payload, {
+        title: job.title,
+        description: job.description,
+        requirements: job.requirements || '',
+      });
+
+      const updatePayload: any = {
+        updated_at: new Date().toISOString(),
+        ai_summary: parsedData.fitSummary,
+        fit_rating: parsedData.fitRating,
+      };
+      if (parsedData.primarySkills?.length) updatePayload.primary_skills = parsedData.primarySkills.join(", ");
+      if (typeof parsedData.yearsOfExperience === "number") updatePayload.years_of_experience = parsedData.yearsOfExperience;
+      if (parsedData.work_experience?.length) updatePayload.work_experience = parsedData.work_experience;
+      if (parsedData.rawResumeText) updatePayload.resume_text = parsedData.rawResumeText;
+      if (parsedData.subScores) updatePayload.sub_scores = parsedData.subScores;
+      if (parsedData.address) updatePayload.address = parsedData.address;
+      if (parsedData.zip_code) updatePayload.zip_code = parsedData.zip_code;
+
+      await supabase.from('candidates').update(updatePayload).eq('id', candidateId);
+
+      // Use the clean extracted text for Pass 2 to avoid binary PDF issues with OpenRouter
+      payload = parsedData.rawResumeText || payload;
     } else if (directText && directText.trim().length > 0) {
       payload = directText;
     } else if (candidate.resume_text && candidate.resume_text.trim().length > 30) {
@@ -120,6 +150,19 @@ export async function generateCandidateScorecard(formData: FormData): Promise<Ge
       activity_type: 'AI Scorecard Generated',
       notes: `Generated deep evaluation scorecard: ${scorecard.recommendation} (${scorecard.fitScore}/100)`,
     });
+
+    // 7. Sync candidate fit_rating
+    try {
+      await supabase
+        .from('candidates')
+        .update({
+          fit_rating: aggregateScore,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', candidateId);
+    } catch (e) {
+      console.warn('Could not update candidate fit_rating:', e);
+    }
 
     revalidatePath('/');
 

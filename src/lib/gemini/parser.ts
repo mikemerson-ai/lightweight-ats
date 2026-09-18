@@ -34,7 +34,9 @@ export interface ParsedCandidate {
   fitRating: number;
   subScores?: SubScores;
   rawResumeText?: string;
-  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
+  work_experience?: Array<{ jobTitle: string; company: string; location?: string; dates: string; isCurrent?: boolean; summary: string }>;
+  education?: Array<{ degree: string; fieldOfStudy: string; institution: string; year: string }>;
+  certifications?: Array<{ name: string; issuingOrganization?: string; issueDate?: string; expirationDate?: string }>;
   jdMinimumExperienceMet?: boolean;
   dynamicRequirementsCheck?: DynamicRequirementCheck[];
   criticalGaps?: string[];
@@ -55,15 +57,20 @@ interface RawIntakeOutput {
   critical_gaps?: string[];
   summary?: string;
   rawResumeText?: string;
-  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
+  work_experience?: Array<{ jobTitle: string; company: string; location?: string; dates: string; isCurrent?: boolean; summary: string }>;
+  education?: Array<{ degree: string; fieldOfStudy: string; institution: string; year: string }>;
+  certifications?: Array<{ name: string; issuingOrganization?: string; issueDate?: string; expirationDate?: string }>;
 }
 
 const INTAKE_INSTRUCTIONS =
-  "You are a strict intake auditor performing a factual job analysis. " +
-  "First, extract the 3 to 5 most critical mandatory requirements from the provided Job Description. " +
-  "Second, evaluate the Resume to see if those requirements are explicitly met. " +
-  "Do not assume or infer qualifications. If a requirement is not explicitly stated in the resume text, set met_in_resume to false and add it to critical_gaps. " +
-  "Provide exact quotes for verified items.";
+  "You are an elite Enterprise ATS Intake Parser. Your task is to extract factual data from the candidate's resume with extreme precision.\n" +
+  "1. Extract the 3 to 5 most critical mandatory requirements from the Job Description and evaluate if they are explicitly met in the resume.\n" +
+  "2. Full Chronological Work History: Extract up to 8 of the most relevant employment records. Include jobTitle, company, location, dates, isCurrent, and summarize their quantifiable impact.\n" +
+  "3. Structured Education & Certifications: Explicitly extract degrees (institution, degree, field, year) and certifications/licenses (Driver's License, CPR, Notary, PMP, RN) as dedicated fields.\n" +
+  "4. Accurate Tenure Math: Calculate the true 'years_of_experience' by performing date math across non-overlapping tenures. Do not just trust the candidate's summary claim.\n" +
+  "5. Skills Taxonomy: Distinguish between Core Domain, Technical/Software, and Soft Skills, and aggregate them into 'primarySkills'.\n" +
+  "6. Full-Fidelity Transcription: Guarantee that 100% of the resume's text is faithfully transcribed into 'rawResumeText' without any truncation or summarization.\n" +
+  "Do not assume or infer qualifications. Provide exact quotes for verified items.";
 
 const CREDENTIAL_PATTERN = /certif|licen|degree|education|credential|clearance|diploma|registration|\bboard\b|\bcpr\b|\bfirst aid\b|\bcna\b|\blpn\b|\brn\b|\blvn\b/i;
 
@@ -132,11 +139,12 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
       },
       primarySkills: {
         type: Type.ARRAY,
-        items: { type: Type.STRING }
+        items: { type: Type.STRING },
+        description: "Categorize skills into Core Domain Competencies, Technical/Software Tools, and Soft/Leadership capabilities, then return as a single aggregated array of strings."
       },
       years_of_experience: {
         type: Type.NUMBER,
-        description: "Total years of professional experience, calculated from the candidate's resume work history."
+        description: "Calculate continuous professional experience by performing precise date math across non-overlapping employment tenures."
       },
       jd_minimum_experience_met: {
         type: Type.BOOLEAN,
@@ -178,16 +186,46 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
       },
       work_experience: {
         type: Type.ARRAY,
-        description: "Extract up to 3 of the most relevant past work experiences. Prioritize roles relevant to the Target Job Description; if none are relevant, use the 3 most recent. Summarize the duties into a concise 1-2 sentence overview.",
+        description: "Extract the full chronological employment history (up to 8 roles) with standardized jobTitle, company, dates, location, isCurrent, and metric-backed impact bullet points.",
         items: {
           type: Type.OBJECT,
           properties: {
             jobTitle: { type: Type.STRING },
             company: { type: Type.STRING },
+            location: { type: Type.STRING },
             dates: { type: Type.STRING },
-            summary: { type: Type.STRING }
+            isCurrent: { type: Type.BOOLEAN },
+            summary: { type: Type.STRING, description: "Metric-backed impact summary" }
           },
           required: ["jobTitle", "company", "dates", "summary"]
+        }
+      },
+      education: {
+        type: Type.ARRAY,
+        description: "Explicitly extract structured education.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            degree: { type: Type.STRING },
+            fieldOfStudy: { type: Type.STRING },
+            institution: { type: Type.STRING },
+            year: { type: Type.STRING }
+          },
+          required: ["degree", "institution"]
+        }
+      },
+      certifications: {
+        type: Type.ARRAY,
+        description: "Explicitly extract certifications and licensures (e.g., Driver's License, CPR, Notary, RN, PMP).",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            issuingOrganization: { type: Type.STRING },
+            issueDate: { type: Type.STRING },
+            expirationDate: { type: Type.STRING }
+          },
+          required: ["name"]
         }
       }
     },
@@ -234,8 +272,8 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     ];
   }
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.1-flash-lite',
+  const generateWithModel = (model: string) => ai.models.generateContent({
+    model: model,
     contents: contents,
     config: {
       responseMimeType: 'application/json',
@@ -243,6 +281,14 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
       temperature: 0.1, // Low temperature for more deterministic extraction
     }
   });
+
+  let response;
+  try {
+    response = await generateWithModel('gemini-3.1-flash-lite');
+  } catch (primaryError) {
+    console.warn('Parser: 3.1 Flash Lite failed. Falling back to 3.5 Flash Lite...', primaryError);
+    response = await generateWithModel('gemini-3.5-flash-lite');
+  }
 
   if (!response.text) {
     throw new Error("Failed to parse resume: No response text from Gemini");
@@ -272,6 +318,8 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     subScores,
     rawResumeText: raw.rawResumeText,
     work_experience: raw.work_experience,
+    education: raw.education,
+    certifications: raw.certifications,
     jdMinimumExperienceMet: raw.jd_minimum_experience_met,
     dynamicRequirementsCheck: raw.dynamic_requirements_check,
     criticalGaps: raw.critical_gaps,

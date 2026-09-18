@@ -718,7 +718,8 @@ export async function uploadCandidateResume(
   const file = formData.get("file") as File | null;
   const authorName = (formData.get("authorName") as string) || "Recruiter";
 
-  if (!file || !(file instanceof File) || file.size === 0) {
+  const isFileValid = file && typeof file === "object" && "size" in file && (file as any).size > 0 && typeof (file as any).arrayBuffer === "function";
+  if (!file || !isFileValid) {
     return { success: false, error: "No resume file provided or file is empty." };
   }
 
