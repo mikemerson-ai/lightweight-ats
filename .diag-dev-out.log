@@ -1,0 +1,12 @@
+
+> lightweight-ats@0.1.0 dev
+> next dev
+
+▲ Next.js 16.3.2 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.11:3000
+- Environments: .env.local
+✓ Ready in 478ms
+✓ Running next.config.ts took 42ms
+
+ GET /api/diag-search 200 in 1445ms (next.js: 626ms, application-code: 819ms)

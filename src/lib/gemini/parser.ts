@@ -126,7 +126,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
   }
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.5-flash-lite',
+    model: 'gemini-3.1-flash-lite',
     contents: contents,
     config: {
       responseMimeType: 'application/json',

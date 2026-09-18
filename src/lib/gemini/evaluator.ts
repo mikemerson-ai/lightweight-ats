@@ -119,7 +119,7 @@ function parseGeminiResponse(response: { text?: string } | undefined): RawScorec
 
 const OPENROUTER_FREE_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
-  'openrouter/free',
+  'qwen/qwen-2.5-72b-instruct:free',
 ];
 
 const OPENROUTER_STRICT_JSON_MANDATE =
