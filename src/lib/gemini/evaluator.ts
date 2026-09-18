@@ -37,7 +37,21 @@ export interface ScorecardResult {
   markdown: string;
 }
 
-function buildScorecardMarkdown(structured: any, targetRole: string): string {
+interface RawScorecard {
+  candidateName?: string;
+  recommendation?: string;
+  fitScore?: number;
+  hardGates?: HardGateItem[];
+  experienceImpact?: {
+    quantifiedImpact: string;
+    scopeSeniorityAlignment: string;
+    careerTrajectory: string;
+  };
+  redFlags?: string[];
+  interviewProbes?: RecruiterProbe[];
+}
+
+function buildScorecardMarkdown(structured: RawScorecard, targetRole: string): string {
   let md = `## Candidate Screening Summary\n`;
   md += `- **Candidate Name:** ${structured.candidateName || 'Candidate'}\n`;
   md += `- **Target Role:** ${targetRole}\n`;
@@ -71,11 +85,129 @@ function buildScorecardMarkdown(structured: any, targetRole: string): string {
 
   md += `### 4. Recruiter Interview Probes (If Advancing)\n`;
   md += `Formulate 2-3 behavioral or technical drill-down questions targeting ambiguities or partial matches:\n`;
-  (structured.interviewProbes || []).forEach((probe: any, idx: number) => {
+  (structured.interviewProbes || []).forEach((probe: RecruiterProbe, idx: number) => {
     md += `${idx + 1}. *[${probe.targetGap || 'Probe'}]*: "${(probe.question || '').replace(/"/g, "'")}"\n`;
   });
 
   return md;
+}
+
+function is503Error(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  const code = (error as { code?: number | string } | null)?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    status === 503 ||
+    code === 503 ||
+    lower.includes('503') ||
+    lower.includes('overloaded')
+  );
+}
+
+function parseGeminiResponse(response: { text?: string } | undefined): RawScorecard {
+  const responseText = response?.text || '';
+  if (!responseText) {
+    throw new Error('Failed to generate scorecard: No response text received from Gemini');
+  }
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    throw new Error('Failed to generate scorecard: Invalid structured response from AI');
+  }
+}
+
+const OPENROUTER_FREE_MODELS = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'openrouter/free',
+];
+
+const OPENROUTER_JSON_INSTRUCTION = `Return ONLY valid JSON (no markdown fences, no additional commentary) that exactly matches this shape:
+{
+  "candidateName": string,
+  "recommendation": "STRONG PURSUE" | "CONDITIONAL SCREEN" | "DO NOT ADVANCE",
+  "fitScore": integer between 0 and 100,
+  "hardGates": [ { "requirement": string, "status": "Match" | "Partial" | "Missing", "evidence": string } ],
+  "experienceImpact": { "quantifiedImpact": string, "scopeSeniorityAlignment": string, "careerTrajectory": string },
+  "redFlags": [ string ],
+  "interviewProbes": [ { "targetGap": string, "question": string } ]
+}`;
+
+function stripJsonFences(text: string): string {
+  let t = text.trim();
+  if (t.startsWith('```')) {
+    t = t.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '');
+    t = t.trim();
+  }
+  return t;
+}
+
+function parseJsonFromModelOutput(content: string): RawScorecard {
+  const stripped = stripJsonFences(content);
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    const start = stripped.indexOf('{');
+    const end = stripped.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      return JSON.parse(stripped.slice(start, end + 1));
+    }
+    throw new Error('Failed to generate scorecard: Invalid structured response from OpenRouter');
+  }
+}
+
+async function buildOpenRouterUserContent(payload: File | string): Promise<string> {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  const isText = payload.type.startsWith('text/') || /\.(txt|md|csv)$/i.test(payload.name);
+  if (isText) {
+    return await payload.text();
+  }
+  return `[Binary resume file "${payload.name}" (${payload.type || 'application/octet-stream'}) — OpenRouter free text models cannot parse binary content]`;
+}
+
+async function generateViaOpenRouter(
+  systemInstructions: string,
+  payload: File | string,
+  originalError: unknown,
+): Promise<RawScorecard> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw originalError;
+  }
+
+  const userContent = await buildOpenRouterUserContent(payload);
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': 'http://localhost:3000',
+      'X-Title': 'Lightweight ATS',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      models: OPENROUTER_FREE_MODELS,
+      messages: [
+        { role: 'system', content: systemInstructions },
+        { role: 'user', content: `${OPENROUTER_JSON_INSTRUCTION}\n\nCandidate Resume:\n${userContent}` },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenRouter fallback failed (${res.status}): ${body.slice(0, 500)}`);
+  }
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('OpenRouter fallback returned no content');
+  }
+
+  return parseJsonFromModelOutput(content);
 }
 
 export async function evaluateResumeAgainstJD(
@@ -192,33 +324,22 @@ You are an expert Technical Recruiter and Talent Acquisition Lead. Your task is 
       }
     });
 
-  let response;
-  try {
-    response = await generateWithModel('gemini-3.6-flash');
-  } catch (error: unknown) {
-    const status = (error as { status?: number })?.status;
-    const code = (error as { code?: number | string })?.code;
-    const message = error instanceof Error ? error.message : String(error);
-    const is503 = status === 503 || code === 503 || message.includes('503');
+  let structured: RawScorecard;
 
-    if (is503) {
-      console.warn('503 caught on 3.6 Flash. Falling back to 3.5 Flash...');
-      response = await generateWithModel('gemini-3.5-flash');
-    } else {
-      throw error;
+  try {
+    structured = parseGeminiResponse(await generateWithModel('gemini-3.6-flash'));
+  } catch (primaryError) {
+    if (!is503Error(primaryError)) {
+      throw primaryError;
     }
-  }
+    console.warn('503 caught on 3.6 Flash. Falling back to 3.5 Flash...');
 
-  const responseText = response.text || '';
-  if (!responseText) {
-    throw new Error('Failed to generate scorecard: No response text received from Gemini');
-  }
-
-  let structured: any;
-  try {
-    structured = JSON.parse(responseText);
-  } catch (err) {
-    throw new Error('Failed to generate scorecard: Invalid structured response from AI');
+    try {
+      structured = parseGeminiResponse(await generateWithModel('gemini-3.5-flash'));
+    } catch (secondaryError) {
+      console.warn('Gemini unavailable (503). Successfully fell back to OpenRouter free models.');
+      structured = await generateViaOpenRouter(systemInstructions, payload, secondaryError);
+    }
   }
 
   let recommendation: ScorecardRecommendation = 'UNKNOWN';
