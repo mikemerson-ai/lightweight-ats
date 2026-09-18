@@ -122,6 +122,9 @@ const OPENROUTER_FREE_MODELS = [
   'openrouter/free',
 ];
 
+const OPENROUTER_STRICT_JSON_MANDATE =
+  'Respond with raw JSON only matching the schema. Do not include markdown code fences, backticks, or any conversational text.';
+
 const OPENROUTER_JSON_INSTRUCTION = `Return ONLY valid JSON (no markdown fences, no additional commentary) that exactly matches this shape:
 {
   "candidateName": string,
@@ -133,25 +136,23 @@ const OPENROUTER_JSON_INSTRUCTION = `Return ONLY valid JSON (no markdown fences,
   "interviewProbes": [ { "targetGap": string, "question": string } ]
 }`;
 
-function stripJsonFences(text: string): string {
-  let t = text.trim();
-  if (t.startsWith('```')) {
-    t = t.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '');
-    t = t.trim();
-  }
-  return t;
-}
+function parseJsonFromModelOutput(rawContent: string): RawScorecard {
+  const text = rawContent.trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
 
-function parseJsonFromModelOutput(content: string): RawScorecard {
-  const stripped = stripJsonFences(content);
+  if (start === -1 || end <= start) {
+    console.error("OpenRouter Raw Output Failed to Parse:", rawContent);
+    throw new Error('Failed to generate scorecard: No JSON object found in OpenRouter response');
+  }
+
+  let jsonCandidate = text.slice(start, end + 1);
+  jsonCandidate = jsonCandidate.replace(/,\s*([\]}])/g, '$1');
+
   try {
-    return JSON.parse(stripped);
+    return JSON.parse(jsonCandidate);
   } catch {
-    const start = stripped.indexOf('{');
-    const end = stripped.lastIndexOf('}');
-    if (start !== -1 && end > start) {
-      return JSON.parse(stripped.slice(start, end + 1));
-    }
+    console.error("OpenRouter Raw Output Failed to Parse:", rawContent);
     throw new Error('Failed to generate scorecard: Invalid structured response from OpenRouter');
   }
 }
@@ -190,9 +191,11 @@ async function generateViaOpenRouter(
     body: JSON.stringify({
       models: OPENROUTER_FREE_MODELS,
       messages: [
-        { role: 'system', content: systemInstructions },
+        { role: 'system', content: `${systemInstructions}\n\n${OPENROUTER_STRICT_JSON_MANDATE}` },
         { role: 'user', content: `${OPENROUTER_JSON_INSTRUCTION}\n\nCandidate Resume:\n${userContent}` },
       ],
+      response_format: { type: 'json_object' },
+      max_tokens: 4096,
     }),
   });
 
