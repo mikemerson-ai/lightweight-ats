@@ -104,10 +104,7 @@ function parseGeminiResponse(response: { text?: string } | undefined): RawScorec
   }
 }
 
-const OPENROUTER_FREE_MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-];
+const OPENROUTER_FREE_MODEL = 'openrouter/free';
 
 const OPENROUTER_STRICT_JSON_MANDATE =
   'Respond with raw JSON only matching the schema. Do not include markdown code fences, backticks, or any conversational text.';
@@ -176,7 +173,7 @@ async function generateViaOpenRouter(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      models: OPENROUTER_FREE_MODELS,
+      model: OPENROUTER_FREE_MODEL,
       messages: [
         { role: 'system', content: `${systemInstructions}\n\n${OPENROUTER_STRICT_JSON_MANDATE}` },
         { role: 'user', content: `${OPENROUTER_JSON_INSTRUCTION}\n\nCandidate Resume:\n${userContent}` },
