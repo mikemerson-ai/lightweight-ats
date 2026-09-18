@@ -15,6 +15,12 @@ export interface SubScores {
   roleSpecificSkills: number;
 }
 
+export interface DynamicRequirementCheck {
+  requirement_extracted_from_jd: string;
+  met_in_resume: boolean;
+  evidence_quote: string | null;
+}
+
 export interface ParsedCandidate {
   firstName: string;
   lastName: string;
@@ -29,6 +35,82 @@ export interface ParsedCandidate {
   subScores?: SubScores;
   rawResumeText?: string;
   work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
+  jdMinimumExperienceMet?: boolean;
+  dynamicRequirementsCheck?: DynamicRequirementCheck[];
+  criticalGaps?: string[];
+}
+
+interface RawIntakeOutput {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  zip_code?: string | null;
+  primarySkills?: string[];
+  years_of_experience?: number;
+  jd_minimum_experience_met?: boolean;
+  jd_minimum_experience_years?: number;
+  dynamic_requirements_check?: DynamicRequirementCheck[];
+  critical_gaps?: string[];
+  summary?: string;
+  rawResumeText?: string;
+  work_experience?: Array<{ jobTitle: string; company: string; dates: string; summary: string }>;
+}
+
+const INTAKE_INSTRUCTIONS =
+  "You are a strict intake auditor performing a factual job analysis. " +
+  "First, extract the 3 to 5 most critical mandatory requirements from the provided Job Description. " +
+  "Second, evaluate the Resume to see if those requirements are explicitly met. " +
+  "Do not assume or infer qualifications. If a requirement is not explicitly stated in the resume text, set met_in_resume to false and add it to critical_gaps. " +
+  "Provide exact quotes for verified items.";
+
+const CREDENTIAL_PATTERN = /certif|licen|degree|education|credential|clearance|diploma|registration|\bboard\b|\bcpr\b|\bfirst aid\b|\bcna\b|\blpn\b|\brn\b|\blvn\b/i;
+
+export function computeExperienceScore(
+  yearsOfExperience: number,
+  metMinimum: boolean | undefined,
+  requiredYears: number | undefined
+): number {
+  if (metMinimum) return 5;
+  const required = requiredYears && requiredYears > 0 ? requiredYears : 5;
+  const ratio = yearsOfExperience / required;
+  return Math.max(1, Math.min(4, Math.round(5 * ratio)));
+}
+
+export function computeCredentialSkillsScores(
+  checks: DynamicRequirementCheck[]
+): { requiredCredentials: number; roleSpecificSkills: number } {
+  const creds = checks.filter((c) => CREDENTIAL_PATTERN.test(c.requirement_extracted_from_jd));
+  const skills = checks.filter((c) => !CREDENTIAL_PATTERN.test(c.requirement_extracted_from_jd));
+
+  const scoreOf = (list: DynamicRequirementCheck[]): number | null => {
+    if (list.length === 0) return null;
+    const met = list.filter((c) => c.met_in_resume).length;
+    return Math.max(1, Math.min(5, Math.round((met / list.length) * 5)));
+  };
+
+  const combined = scoreOf(checks) ?? 3;
+  return {
+    requiredCredentials: scoreOf(creds) ?? combined,
+    roleSpecificSkills: scoreOf(skills) ?? combined,
+  };
+}
+
+export function computeSubScores(raw: RawIntakeOutput): SubScores {
+  const checks = raw.dynamic_requirements_check ?? [];
+  const { requiredCredentials, roleSpecificSkills } = computeCredentialSkillsScores(checks);
+  const functionalExperience = computeExperienceScore(
+    raw.years_of_experience ?? 0,
+    raw.jd_minimum_experience_met,
+    raw.jd_minimum_experience_years
+  );
+  return { functionalExperience, requiredCredentials, roleSpecificSkills };
+}
+
+export function computeFitRating(subScores: SubScores): number {
+  const avg = (subScores.functionalExperience + subScores.requiredCredentials + subScores.roleSpecificSkills) / 3;
+  return Math.max(1, Math.min(5, Math.round(avg)));
 }
 
 export async function parseResumeData(payload: File | string, jobContext?: JobContext): Promise<ParsedCandidate> {
@@ -52,24 +134,43 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         type: Type.ARRAY,
         items: { type: Type.STRING }
       },
-      yearsOfExperience: { type: Type.NUMBER },
-      fitSummary: {
-        type: Type.STRING,
-        description: "Objective 2-sentence paragraph. State total years of experience first, flag the missing role-specific requirements in sentence 1, and justify the rating in sentence 2."
-      },
-      fitRating: {
+      years_of_experience: {
         type: Type.NUMBER,
-        description: "1-5 stars."
+        description: "Total years of professional experience, calculated from the candidate's resume work history."
       },
-      subScores: {
-        type: Type.OBJECT,
-        description: "Three-pillar dimensional breakdown (1 to 5 scale each).",
-        properties: {
-          functionalExperience: { type: Type.INTEGER, description: "1-5 score for core operational duties and role experience." },
-          requiredCredentials: { type: Type.INTEGER, description: "1-5 score for mandatory education, degrees, licenses, or compliance clearances." },
-          roleSpecificSkills: { type: Type.INTEGER, description: "1-5 score for specific tools, technologies, and domain competencies." }
-        },
-        required: ["functionalExperience", "requiredCredentials", "roleSpecificSkills"]
+      jd_minimum_experience_met: {
+        type: Type.BOOLEAN,
+        description: "True if the resume work history meets or exceeds the minimum years of experience explicitly required by the Job Description; otherwise false."
+      },
+      jd_minimum_experience_years: {
+        type: Type.NUMBER,
+        description: "The minimum years of experience explicitly required by the Job Description. Return 0 if the JD does not state a numeric minimum."
+      },
+      dynamic_requirements_check: {
+        type: Type.ARRAY,
+        description: "3 to 5 critical mandatory requirements extracted from the Job Description, each evaluated against the resume.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            requirement_extracted_from_jd: { type: Type.STRING, description: "A specific mandatory requirement stated in the Job Description." },
+            met_in_resume: { type: Type.BOOLEAN },
+            evidence_quote: {
+              type: Type.STRING,
+              nullable: true,
+              description: "Exact string excerpt from the resume that proves the requirement, or null when met_in_resume is false."
+            }
+          },
+          required: ["requirement_extracted_from_jd", "met_in_resume", "evidence_quote"]
+        }
+      },
+      critical_gaps: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "List of Job Description requirements whose met_in_resume evaluated to false."
+      },
+      summary: {
+        type: Type.STRING,
+        description: "Concise 2-sentence synopsis stating total experience, alignment with the specific Job Description, and noting any critical gaps."
       },
       rawResumeText: {
         type: Type.STRING,
@@ -90,24 +191,32 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
         }
       }
     },
-    required: ["firstName", "lastName", "email", "phone", "address", "zip_code", "primarySkills", "yearsOfExperience", "fitSummary", "fitRating"]
+    required: [
+      "firstName",
+      "lastName",
+      "email",
+      "phone",
+      "address",
+      "zip_code",
+      "primarySkills",
+      "years_of_experience",
+      "jd_minimum_experience_met",
+      "dynamic_requirements_check",
+      "critical_gaps",
+      "summary"
+    ]
   };
+
+  const jobDescriptionText =
+    `Target Job Title: ${jobContext.title}\n` +
+    `Target Job Description: ${jobContext.description}\n` +
+    `Target Job Requirements: ${jobContext.requirements || ''}`;
 
   let contents: any[];
 
-  let instructions = "You are an objective talent acquisition specialist evaluating a candidate against a target Job Title and Job Description.";
-
-  if (jobContext) {
-    instructions += `\n\nTarget Job Title: ${jobContext.title}\nTarget Job Description: ${jobContext.description}\nTarget Job Requirements: ${jobContext.requirements}\n\nUNIVERSAL SCORING RUBRIC (1 to 5 Stars):\n- 5 Stars (Exceptional Fit): Meets or exceeds core requirements, demonstrates substantial direct experience in the target role functions, and holds all mandatory certifications or licenses.\n- 4 Stars (Strong Fit): Significant direct experience in the core functional duties with strong domain relevance; meets primary qualifications with only minor preference gaps.\n- 3 Stars (Moderate / High-Potential Fit): Strong transferable domain knowledge and functional track record, but requires obtaining or renewing specific secondary certifications, tools, or niche credentials. Do NOT hard-cap strong transferable candidates at 2 stars if they possess proven core competencies.\n- 2 Stars (Weak Fit): Related industry or adjacent domain background, but lacks direct experience in the primary functional responsibilities outlined in the job description.\n- 1 Star (Mismatch): Unrelated background or fails to meet baseline minimum qualifications.\n\nSUB-SCORE PILLARS (1 to 5 Stars each):\n- functionalExperience: Depth and duration of past direct responsibilities matching the role duties.\n- requiredCredentials: Check against required education, state licenses, or certifications (5 if met/exceeded, 3 if minor/trainable certs missing, 1-2 if mandatory core licenses missing).\n- roleSpecificSkills: Alignment of technical proficiencies, specialized software, and key skills.\n\nEVALUATION RULES:\n1. Dynamic Grounding: Base evaluations strictly on the provided Target Job Title and Target Job Description.\n2. Balanced Weighting: Distinguish between trainable/acquirable certifications vs. core functional experience. Award 3/5 to candidates who have strong practical experience in adjacent or foundational duties even if minor credentials must be acquired on the job.\n3. fitSummary Structure (Strictly 2 Sentences):\n   - Sentence 1: Summarize total years of relevant experience, noting core strengths and any missing requirements or credentials.\n   - Sentence 2: Provide an objective rationale explaining the rating and the exact gaps needed to reach full alignment.`;
-  } else {
-    instructions += "\n\nParse the attached resume document and extract the candidate information according to the schema.";
-  }
-
-  instructions += "\n\nZIP CODE EXTRACTION RULE: Always extract the candidate's 5-digit U.S. postal ZIP code into the separate `zip_code` field, even if it is also present inside the main address string (e.g., \"Philadelphia, PA 19124\" or a dedicated ZIP/Postal Code line). If no ZIP code can be found anywhere, return an empty string.";
-
   if (typeof payload === 'string') {
     contents = [
-      `${instructions}\n\nCandidate Resume:\n${payload}`
+      `${INTAKE_INSTRUCTIONS}\n\n${jobDescriptionText}\n\nCandidate Resume:\n${payload}\n\nZIP CODE EXTRACTION RULE: Always extract the candidate's 5-digit U.S. postal ZIP code into the separate \`zip_code\` field, even if it is also present inside the main address string (e.g., "Philadelphia, PA 19124" or a dedicated ZIP/Postal Code line). If no ZIP code can be found anywhere, return an empty string.`
     ];
   } else {
     // It's a File object
@@ -115,7 +224,7 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     const mimeType = payload.type || 'application/pdf'; // fallback to pdf
 
     contents = [
-      instructions,
+      `${INTAKE_INSTRUCTIONS}\n\n${jobDescriptionText}\n\nZIP CODE EXTRACTION RULE: Always extract the candidate's 5-digit U.S. postal ZIP code into the separate \`zip_code\` field, even if it is also present inside the main address string (e.g., "Philadelphia, PA 19124" or a dedicated ZIP/Postal Code line). If no ZIP code can be found anywhere, return an empty string.`,
       {
         inlineData: {
           data: fileBase64,
@@ -139,16 +248,41 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     throw new Error("Failed to parse resume: No response text from Gemini");
   }
 
+  let raw: RawIntakeOutput;
   try {
-    const parsed = JSON.parse(response.text) as ParsedCandidate;
-    if (typeof payload === 'string' && !parsed.rawResumeText) {
-      parsed.rawResumeText = payload;
-    }
-    if (!parsed.zip_code && parsed.address) {
-      parsed.zip_code = extractZipCode(parsed.address);
-    }
-    return parsed;
+    raw = JSON.parse(response.text) as RawIntakeOutput;
   } catch (err) {
     throw new Error("Failed to parse resume: Invalid JSON response");
   }
+
+  const subScores = computeSubScores(raw);
+  const fitRating = computeFitRating(subScores);
+
+  const parsed: ParsedCandidate = {
+    firstName: raw.firstName ?? '',
+    lastName: raw.lastName ?? '',
+    email: raw.email ?? '',
+    phone: raw.phone ?? '',
+    address: raw.address ?? '',
+    zip_code: raw.zip_code ?? null,
+    primarySkills: raw.primarySkills ?? [],
+    yearsOfExperience: raw.years_of_experience ?? 0,
+    fitSummary: raw.summary ?? '',
+    fitRating,
+    subScores,
+    rawResumeText: raw.rawResumeText,
+    work_experience: raw.work_experience,
+    jdMinimumExperienceMet: raw.jd_minimum_experience_met,
+    dynamicRequirementsCheck: raw.dynamic_requirements_check,
+    criticalGaps: raw.critical_gaps,
+  };
+
+  if (typeof payload === 'string' && !parsed.rawResumeText) {
+    parsed.rawResumeText = payload;
+  }
+  if (!parsed.zip_code && parsed.address) {
+    parsed.zip_code = extractZipCode(parsed.address);
+  }
+
+  return parsed;
 }
