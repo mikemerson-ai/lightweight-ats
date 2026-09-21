@@ -32,3 +32,25 @@ export function getSourceTypeForChannel(channel: string): "inbound" | "outbound"
   return "outbound";
 }
 
+
+const DSP_JOB_TITLE_MATCHES = ["direct support professional", "dsp"] as const;
+const HHA_JOB_TITLE_MATCHES = ["home health aide", "hha"] as const;
+
+export function getCandidateRole(title: string | null | undefined): "dsp" | "hha" | null {
+  const normalized = (title ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+
+  const isDsp = DSP_JOB_TITLE_MATCHES.some((match) => {
+    if (normalized === match) return true;
+    return new RegExp(`(^|[^a-z0-9])${match}([^a-z0-9]|$)`).test(normalized);
+  });
+  if (isDsp) return "dsp";
+
+  const isHha = HHA_JOB_TITLE_MATCHES.some((match) => {
+    if (normalized === match) return true;
+    return new RegExp(`(^|[^a-z0-9])${match}([^a-z0-9]|$)`).test(normalized);
+  });
+  if (isHha) return "hha";
+
+  return null;
+}

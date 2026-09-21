@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { Candidate } from "@/app/actions/candidates";
 import { getDspCandidates } from "@/app/actions/candidates";
+import { getCandidateRole } from "@/lib/constants";
 import type { GroupHome } from "@/types/groupHomes";
 import { SHIFT_OPTIONS, AVAILABILITY_DAYS_OPTIONS, type ShiftPreference } from "@/types/groupHomes";
 import { getGroupHomes } from "@/app/actions/groupHomes";
@@ -64,6 +65,7 @@ export function DspLeadMatchingView() {
   const [selectedAvailabilityDays, setSelectedAvailabilityDays] = useState<string[]>([]);
   const [selectedStage, setSelectedStage] = useState<string>("all");
   const [selectedTemperature, setSelectedTemperature] = useState<string>("all");
+  const [selectedRole, setSelectedRole] = useState<"all" | "dsp" | "hha">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Sorting
@@ -164,6 +166,12 @@ export function DspLeadMatchingView() {
         return false;
       }
 
+      // Role filter
+      if (selectedRole !== "all") {
+        const role = getCandidateRole(c.jobs?.title);
+        if (role !== selectedRole) return false;
+      }
+
       // Temperature filter
       if (selectedTemperature !== "all") {
         if (selectedTemperature === "unset") {
@@ -217,7 +225,7 @@ export function DspLeadMatchingView() {
 
       return true;
     });
-  }, [enrichedCandidates, selectedStage, selectedTemperature, selectedRadius, selectedShifts, selectedAvailabilityDays, searchQuery]);
+  }, [enrichedCandidates, selectedStage, selectedTemperature, selectedRadius, selectedShifts, selectedAvailabilityDays, searchQuery, selectedRole]);
 
   // Sort candidates
   const sortedCandidates = useMemo(() => {
@@ -292,8 +300,9 @@ export function DspLeadMatchingView() {
     if (selectedShifts.length > 0) count += selectedShifts.length;
     if (selectedStage !== "all") count++;
     if (searchQuery.trim()) count++;
+    if (selectedRole !== "all") count++;
     return count;
-  }, [selectedHomeId, selectedRadius, selectedShifts, selectedStage, searchQuery]);
+  }, [selectedHomeId, selectedRadius, selectedShifts, selectedStage, searchQuery, selectedRole]);
 
   function resetAllFilters() {
     setSelectedHomeId("all");
@@ -301,6 +310,7 @@ export function DspLeadMatchingView() {
     setSelectedShifts([]);
     setSelectedStage("all");
     setSearchQuery("");
+    setSelectedRole("all");
   }
 
   const handleShiftToggle = (shift: ShiftPreference) => {
@@ -597,8 +607,52 @@ export function DspLeadMatchingView() {
 
         {/* Second Row: Radius Preset Pills & Shift Filters */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-          {/* Shift Preferences Pills */}
+          
+          {/* Role Filter */}
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 mr-1">
+              <Users className="h-3.5 w-3.5 text-slate-400" />
+              Role:
+            </span>
+            <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setSelectedRole("all")}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                  selectedRole === "all"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-transparent"
+                }`}
+              >
+                Both
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole("dsp")}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                  selectedRole === "dsp"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-transparent"
+                }`}
+              >
+                DSP
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole("hha")}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                  selectedRole === "hha"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-transparent"
+                }`}
+              >
+                HHA
+              </button>
+            </div>
+          </div>
+
+          {/* Shift Preferences Pills */}
+          <div className="flex flex-wrap items-center gap-2 border-l border-slate-200 pl-3">
             <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 mr-1">
               <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
               Shifts:

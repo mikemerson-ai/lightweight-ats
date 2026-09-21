@@ -9,6 +9,7 @@ import { parseResumeData, type ParsedCandidate } from "@/lib/gemini/parser";
 import { SourcingChannel } from "@/lib/constants";
 import type { Evaluation } from "@/types/evaluations";
 import { extractZipCode } from "@/lib/geo/commute";
+import { getCandidateRole } from "@/lib/constants";
 
 const HIRED_STAGE = "hired";
 const DISQUALIFIED_STAGE = "disqualified";
@@ -1473,21 +1474,7 @@ export async function bulkAddCandidates(
  * included. Everything else (Trainer, administrative, and other non-caregiver
  * roles) is excluded from this view and its metrics.
  */
-const DSP_HHA_JOB_TITLE_MATCHES = [
-  "direct support professional",
-  "home health aide",
-  "dsp",
-  "hha",
-] as const;
 
-function isDspOrHhaJobTitle(title: string | null | undefined): boolean {
-  const normalized = (title ?? "").trim().toLowerCase();
-  if (!normalized) return false;
-  return DSP_HHA_JOB_TITLE_MATCHES.some((match) => {
-    if (normalized === match) return true;
-    return new RegExp(`(^|[^a-z0-9])${match}([^a-z0-9]|$)`).test(normalized);
-  });
-}
 
 /**
  * Fetch candidates for the DSP Proximity and Lead Matching view, restricted to
@@ -1508,7 +1495,7 @@ export async function getDspCandidates(): Promise<Candidate[]> {
 
     const candidates = (data as Candidate[]) ?? [];
     return candidates.filter((candidate) =>
-      isDspOrHhaJobTitle(candidate.jobs?.title),
+      getCandidateRole(candidate.jobs?.title) !== null,
     );
   } catch (err) {
     console.error("Error in getDspCandidates:", err);
