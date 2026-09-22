@@ -19,8 +19,9 @@ import {
   Mail,
   Compass,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { Candidate } from "@/app/actions/candidates";
-import { getDspCandidates } from "@/app/actions/candidates";
+import { getDspCandidates, updateCandidateStage } from "@/app/actions/candidates";
 import { getCandidateRole } from "@/lib/constants";
 import type { GroupHome } from "@/types/groupHomes";
 import { SHIFT_OPTIONS, AVAILABILITY_DAYS_OPTIONS, type ShiftPreference } from "@/types/groupHomes";
@@ -1062,11 +1063,27 @@ export function DspLeadMatchingView() {
             );
             setDrawerCandidate(updated);
           }}
-          onStageChange={(cand, newStage) => {
+          onStageChange={async (cand, newStage) => {
+            const previousStage = cand.pipeline_stage;
+            
+            // Optimistic update
             setCandidates((prev) =>
               prev.map((c) => (c.id === cand.id ? { ...c, pipeline_stage: newStage } : c))
             );
             setDrawerCandidate((prev) => (prev ? { ...prev, pipeline_stage: newStage } : prev));
+            
+            try {
+              await updateCandidateStage(cand.id, newStage);
+              toast.success(`Stage updated successfully`);
+            } catch (err) {
+              console.error("Failed to update stage:", err);
+              toast.error("Failed to update candidate stage.");
+              // Revert optimistic update
+              setCandidates((prev) =>
+                prev.map((c) => (c.id === cand.id ? { ...c, pipeline_stage: previousStage } : c))
+              );
+              setDrawerCandidate((prev) => (prev ? { ...prev, pipeline_stage: previousStage } : prev));
+            }
           }}
         />
       )}
