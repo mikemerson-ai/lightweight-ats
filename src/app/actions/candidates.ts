@@ -533,6 +533,38 @@ export async function quickAddSourcedCandidate(
 }
 
 
+// Lightweight columns for the Kanban board. `resume_text` and the heavy
+// evaluation columns (`notes`, `scores`) are intentionally excluded so a job
+// with 300+ candidates stays well under the 1MB Server Action response limit.
+// A thin slice of evaluations is still embedded so the scorecard summary badges
+// can render on first paint; `reviewer_name` is required to identify the AI
+// scorecard (the heavy markdown `notes` are hydrated in the drawer instead).
+const KANBAN_BOARD_COLUMNS = `
+  id, job_id, first_name, last_name, email, phone, primary_skills, source_channel,
+  pipeline_stage, status_tag, temperature, source_type, pending_resume, linkedin_url,
+  resume_url, ai_summary, fit_rating, sub_scores, years_of_experience, address,
+  zip_code, shift_preferences, created_at, updated_at,
+  date_applied, date_sourced, dnh_flag, dnh_reason, dnh_date, dnh_recruiter,
+  jobs(title), evaluations(id, reviewer_name, aggregate_score, recommendation)
+`.replace(/\s+/g, "");
+
+export async function getKanbanCandidates(jobId: string): Promise<Candidate[]> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("candidates")
+    .select(KANBAN_BOARD_COLUMNS)
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Supabase Error in getKanbanCandidates:", error);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as Candidate[]) ?? [];
+}
+
 export async function getCandidatesByJob(jobId: string): Promise<{ data: Candidate[] | null; error: string | null }> {
   try {
     const supabase = createAdminClient();
@@ -1279,6 +1311,28 @@ export async function getCandidateById(candidateId: string): Promise<Candidate |
   }
 }
 
+/**
+ * Thick candidate fetch for the drawer. Selects every heavy field — resume text,
+ * work experience, sub-scores, plus related evaluations and the full job — that
+ * are deliberately omitted from the thin board query.
+ */
+export async function getCandidateDetails(candidateId: string): Promise<Candidate | null> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("*, evaluations(*), jobs(*)")
+    .eq("id", candidateId)
+    .single();
+
+  if (error) {
+    console.error("Error in getCandidateDetails:", error);
+    throw new Error(error.message);
+  }
+
+  return (data as Candidate) ?? null;
+}
+
 export interface BatchImportCandidateInput {
   queue_id?: string;
   first_name: string;
@@ -1494,13 +1548,28 @@ export async function bulkAddCandidates(
 /**
  * Fetch candidates for the DSP Proximity and Lead Matching view, restricted to
  * Direct Support Professional (DSP) and Home Health Aide (HHA) roles only.
+ *
+ * `resume_text` and the heavy evaluation columns are intentionally excluded —
+ * pulling every candidate's raw resume text in one response was blowing past the
+ * 1MB Server Action limit and crashing this view (React error #441). Only the
+ * small scorecard summary fields are embedded.
  */
 export async function getDspCandidates(): Promise<Candidate[]> {
   try {
     const supabase = createAdminClient();
+
+    const DSP_CANDIDATE_COLUMNS = `
+      id, job_id, first_name, last_name, email, phone, primary_skills, source_channel,
+      pipeline_stage, temperature, source_type, address, zip_code, shift_preferences,
+      created_at, date_applied, date_sourced, years_of_experience,
+      fit_rating, ai_summary, resume_url, linkedin_url, dnh_flag, dnh_reason, dnh_date,
+      dnh_recruiter, pending_resume, jobs(id, title),
+      evaluations(id, reviewer_name, aggregate_score, recommendation)
+    `.replace(/\s+/g, "");
+
     const { data, error } = await supabase
       .from("candidates")
-      .select("*, jobs(id, title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+      .select(DSP_CANDIDATE_COLUMNS)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -1508,7 +1577,7 @@ export async function getDspCandidates(): Promise<Candidate[]> {
       return [];
     }
 
-    const candidates = (data as Candidate[]) ?? [];
+    const candidates = (data as unknown as Candidate[]) ?? [];
     return candidates.filter((candidate) =>
       getCandidateRole(candidate.jobs?.title) !== null,
     );
