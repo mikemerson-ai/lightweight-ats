@@ -1,6 +1,8 @@
 import { getJobs } from "@/app/actions/jobs";
 import { DashboardClient } from "@/components/DashboardClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home({
   searchParams,
 }: {

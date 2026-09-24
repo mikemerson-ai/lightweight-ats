@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { CandidateDocument } from "@/types/documents";
 import { parseResumeData, type ParsedCandidate } from "@/lib/gemini/parser";
 
@@ -549,6 +549,8 @@ const KANBAN_BOARD_COLUMNS = `
 `.replace(/\s+/g, "");
 
 export async function getKanbanCandidates(jobId: string): Promise<Candidate[]> {
+  noStore();
+
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
@@ -1555,6 +1557,8 @@ export async function bulkAddCandidates(
  * small scorecard summary fields are embedded.
  */
 export async function getDspCandidates(): Promise<Candidate[]> {
+  noStore();
+
   try {
     const supabase = createAdminClient();
 
@@ -1572,9 +1576,20 @@ export async function getDspCandidates(): Promise<Candidate[]> {
       .select(DSP_CANDIDATE_COLUMNS)
       .order("created_at", { ascending: false });
 
+    console.log(
+      `[Vercel Debug] DSP Fetch: ${data?.length} candidates found. Error:`,
+      error?.message,
+    );
+
     if (error) {
       console.warn("Failed to fetch DSP candidates:", error.message);
       return [];
+    }
+
+    if (!data || data.length === 0) {
+      console.log(
+        "[Vercel Debug] DSP Fetch returned 0 rows with no error. Query is unfiltered: no jobId and no .eq()/.ilike() filters are applied at the Supabase level. Suspect role filtering below (getCandidateRole) or the admin-client/RLS config on Vercel.",
+      );
     }
 
     const candidates = (data as unknown as Candidate[]) ?? [];
