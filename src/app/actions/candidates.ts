@@ -537,9 +537,18 @@ export async function getCandidatesByJob(jobId: string): Promise<{ data: Candida
   try {
     const supabase = createAdminClient();
 
+    const COLUMNS = `
+      id, job_id, first_name, last_name, email, phone, primary_skills, source_channel, pipeline_stage, status_tag,
+      dnh_date, dnh_recruiter_name, dnh_reason, disqualification_reason, offer_status, created_at, updated_at, ai_summary,
+      years_of_experience, suggested_role_fit, contact_info, linkedin_url, pending_resume, source_type, date_applied,
+      date_sourced, sourcing_channel, outreach_notes, dnh_flag, dnh_recruiter, docusign_link, docusign_status, address,
+      fit_rating, work_experience, sub_scores, resume_url, resume_storage_path, zip_code, shift_preferences, temperature,
+      jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)
+    `.replace(/\s+/g, "");
+
     const { data, error } = await supabase
       .from("candidates")
-      .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+      .select(COLUMNS)
       .eq("job_id", jobId)
       .order("created_at", { ascending: false });
 
@@ -548,7 +557,7 @@ export async function getCandidatesByJob(jobId: string): Promise<{ data: Candida
       return { data: null, error: error.message };
     }
 
-    return { data: (data as Candidate[]) ?? [], error: null };
+    return { data: (data as unknown as Candidate[]) ?? [], error: null };
   } catch (err: any) {
     console.error("Exception in getCandidatesByJob:", err);
     return { data: null, error: err.message || "Unknown server error" };
