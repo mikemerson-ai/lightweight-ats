@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { extractZipCode } from '@/lib/geo/commute';
-import { PDFParse } from 'pdf-parse';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -187,6 +186,7 @@ const OPENROUTER_PARSER_JSON_INSTRUCTION = `Return ONLY valid JSON (no markdown 
 
 async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
   try {
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buffer });
     const data = await parser.getText();
     return data.text?.trim() ?? '';
