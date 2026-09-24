@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { toast } from "sonner";
-import { type Candidate, searchCandidates } from "@/app/actions/candidates";
+import { type Candidate } from "@/app/actions/candidates";
 
 export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidate: Candidate) => void }) {
   const [query, setQuery] = useState("");
@@ -20,7 +20,7 @@ export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidat
 
     const trimmed = query.trim();
 
-    debounceRef.current = setTimeout(() => {
+    debounceRef.current = setTimeout(async () => {
       if (!trimmed) {
         setResults([]);
         setOpen(false);
@@ -29,18 +29,28 @@ export function SearchBar({ onSelectCandidate }: { onSelectCandidate?: (candidat
       }
 
       setLoading(true);
-      searchCandidates(trimmed)
-        .then((data) => {
-          setResults(data);
-          setOpen(true);
-        })
-        .catch((err: any) => {
-          console.error("Search failed:", err);
-          toast.error("Failed to perform search. Please try again.");
-          setResults([]);
-          setOpen(true);
-        })
-        .finally(() => setLoading(false));
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("candidates")
+          .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+          .or(
+            `first_name.ilike.%${trimmed}%,last_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%,phone.ilike.%${trimmed}%,pipeline_stage.ilike.%${trimmed}%`
+          )
+          .limit(10);
+
+        if (error) throw error;
+        setResults(data as Candidate[]);
+        setOpen(true);
+      } catch (err: any) {
+        console.error("Search failed:", err);
+        toast.error("Failed to perform search. Please try again.");
+        setResults([]);
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
     }, trimmed ? 300 : 0);
 
     return () => {
