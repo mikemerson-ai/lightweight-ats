@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import {
   generateOutreachMessage,
@@ -35,7 +35,7 @@ export async function generateCandidateOutreachAction(
       return { success: false, error: "Candidate ID is required" };
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 1. Fetch candidate and job
     const { data: candidate, error: candidateError } = await supabase
@@ -109,7 +109,7 @@ export async function logCandidateOutreachActivity(
   try {
     const { candidateId, channel, subject, body, recruiterName, isFollowUp } = input;
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const channelLabels: Record<OutreachChannel, string> = {
       email: "Email",

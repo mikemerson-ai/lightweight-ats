@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { Evaluation, SubmitEvaluationInput, ScorecardTemplate, ScorecardCriterion } from "@/types/evaluations";
 
@@ -18,7 +18,7 @@ function computeAggregate(scores: Record<string, number>): number {
 export async function getEvaluationsByCandidate(
   candidateId: string,
 ): Promise<Evaluation[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("evaluations")
@@ -36,7 +36,7 @@ export async function getEvaluationsByCandidate(
 export async function submitEvaluation(
   input: SubmitEvaluationInput,
 ): Promise<Evaluation> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("evaluations")
@@ -62,7 +62,7 @@ export async function submitEvaluation(
 export async function getScorecardTemplate(
   jobId: string,
 ): Promise<ScorecardTemplate> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("scorecard_templates")
@@ -97,7 +97,7 @@ export async function saveScorecardTemplate(
   templateName: string,
   criteria: ScorecardCriterion[],
 ): Promise<ScorecardTemplate> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("scorecard_templates")

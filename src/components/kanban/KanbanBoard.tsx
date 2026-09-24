@@ -7,9 +7,9 @@ import { toast } from "sonner";
 import {
   updateCandidateStage,
   getCandidateById,
+  getCandidatesByJob,
   type Candidate,
 } from "@/app/actions/candidates";
-import { createClient } from "@/lib/supabase/client";
 import type { Job } from "@/app/actions/jobs";
 import { getEvaluationsByCandidate } from "@/app/actions/evaluations";
 import { DndContextWrapper } from "./DndContextWrapper";
@@ -171,18 +171,8 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
 
   const loadCandidates = useCallback(async (targetId: string) => {
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("candidates")
-        .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
-        .eq("job_id", targetId)
-        .order("created_at", { ascending: false });
-        
-      if (error) {
-        console.error("Client Supabase Error:", error);
-        throw error;
-      }
-      setCandidates((data as Candidate[]) || []);
+      const data = await getCandidatesByJob(targetId);
+      setCandidates(data || []);
       setLoadedJobId(targetId);
     } catch (err) {
       console.error("Error loading candidates in Kanban:", err);

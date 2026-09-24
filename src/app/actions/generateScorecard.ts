@@ -1,7 +1,7 @@
 'use server';
 
 import mammoth from 'mammoth';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 import { evaluateResumeAgainstJD, type ScorecardResult } from '@/lib/gemini/evaluator';
 import { parseResumeData } from '@/lib/gemini/parser';
@@ -22,7 +22,7 @@ export async function generateCandidateScorecard(formData: FormData): Promise<Ge
       return { success: false, error: 'Candidate ID is required' };
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 1. Fetch candidate and job details
     const { data: candidate, error: candidateError } = await supabase

@@ -1,6 +1,5 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { GroupHome } from "@/types/groupHomes";
@@ -42,7 +41,7 @@ export async function createGroupHome(
   home: Omit<GroupHome, "id" | "created_at" | "updated_at">,
 ): Promise<{ success: boolean; data?: GroupHome; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("group_homes")
       .insert({
@@ -76,7 +75,7 @@ export async function updateGroupHome(
   updates: Partial<Omit<GroupHome, "id" | "created_at">>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { error } = await supabase
       .from("group_homes")
       .update({

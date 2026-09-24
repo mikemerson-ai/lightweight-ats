@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { revalidatePath } from "next/cache";
 
@@ -28,7 +28,7 @@ export interface CreateJobInput {
 }
 
 export async function getJobs(): Promise<Job[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("jobs")
@@ -45,7 +45,7 @@ export async function getJobs(): Promise<Job[]> {
 
 export async function getActiveJobs(): Promise<Job[]> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from("jobs")
@@ -67,7 +67,7 @@ export async function getActiveJobs(): Promise<Job[]> {
 
 export async function createJob(formData: FormData): Promise<{ success: boolean; data?: Job; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const title = (formData.get("title") as string)?.trim();
     const department = (formData.get("department") as string)?.trim();
@@ -123,7 +123,7 @@ export async function updateJob(
   data: { title: string; department: string; target_headcount: number; description: string; requirements: string }
 ): Promise<{ success: boolean; data?: Job; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data: existingJob, error: checkError } = await supabase
       .from("jobs")
@@ -157,7 +157,7 @@ export async function updateJob(
 
 export async function deleteJob(jobId: string, forceCascade: boolean = false): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Check if active candidates are assigned to the job.
     const { data: candidates, error: candidateError } = await supabase
@@ -214,7 +214,7 @@ export async function toggleJobStatus(
   jobId: string,
   currentStatus: JobStatus,
 ): Promise<Job> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const nextStatus: JobStatus = currentStatus === "Active" ? "Closed" : "Active";
 
@@ -234,7 +234,7 @@ export async function toggleJobStatus(
 }
 
 export async function getJobById(jobId: string): Promise<Job | null> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("jobs")

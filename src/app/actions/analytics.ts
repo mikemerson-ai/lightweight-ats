@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import type {
   AnalyticsData,
@@ -41,7 +41,7 @@ interface CandidateDocumentRow {
 export async function getAnalyticsData(
   jobId?: string,
 ): Promise<AnalyticsData> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let candidatesQuery = supabase
     .from("candidates")
@@ -268,7 +268,7 @@ async function buildRecruiterActivity(
   jobId: string | undefined,
   totalCandidates: number,
 ): Promise<RecruiterMetric[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const activityQuery = supabase
     .from("activity_logs")

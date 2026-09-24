@@ -2,7 +2,7 @@
 
 import mammoth from 'mammoth';
 import { parseResumeData, ParsedCandidate, JobContext } from '@/lib/gemini/parser';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface ParseResumeResult {
   success: boolean;
@@ -22,7 +22,7 @@ export async function parseResumeAction(formData: FormData): Promise<ParseResume
 
     let jobContext: JobContext | undefined;
     if (jobId) {
-      const supabase = await createClient();
+      const supabase = createAdminClient();
       const { data: job, error } = await supabase
         .from('jobs')
         .select('title, description, requirements')

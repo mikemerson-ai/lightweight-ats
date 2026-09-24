@@ -1,6 +1,5 @@
 "use server";
-
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 import type { Recruiter } from "@/types/recruiters";
@@ -9,7 +8,7 @@ export type { Recruiter };
 
 export async function getRecruiters(): Promise<Recruiter[]> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from("recruiters")
@@ -37,7 +36,7 @@ export async function createRecruiter(data: {
   title?: string;
   email: string;
 }): Promise<Recruiter> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   if (!data.name || !data.email) {
     throw new Error("Name and Email are required.");

@@ -1,6 +1,5 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { CandidateDocument } from "@/types/documents";
@@ -158,7 +157,7 @@ export async function getCandidateDocuments(
 
 export async function searchCandidates(query: string): Promise<Candidate[]> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const trimmed = query.trim();
     if (!trimmed) {
@@ -234,7 +233,7 @@ export async function checkCandidateDuplicate(
   sameJob: boolean;
   existingRecord?: Partial<Candidate> & { jobs?: { title?: string } };
 }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const isInvalidEmail = !email || !email.trim() || ["not provided", "not available", "n/a"].includes(email.trim().toLowerCase());
   const validEmail = isInvalidEmail ? null : email?.trim();
@@ -289,7 +288,7 @@ export async function checkBatchCandidateDuplicates(
   items: BatchDuplicateCheckItem[],
   targetJobId: string
 ): Promise<Record<string, CandidateDuplicateResult>> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const results: Record<string, CandidateDuplicateResult> = {};
 
   if (!items || items.length === 0) {
@@ -425,7 +424,7 @@ export async function quickAddSourcedCandidate(
   data: QuickAddSourcedCandidateInput,
 ): Promise<{ success: boolean; candidate?: Candidate; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const insertPayload: any = {
       first_name: data.first_name,
@@ -535,7 +534,7 @@ export async function quickAddSourcedCandidate(
 
 
 export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("candidates")
@@ -558,7 +557,7 @@ export async function updateCandidateStage(
   recruiterName?: string,
 ): Promise<StageTransitionResult> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     if (newStage === HIRED_STAGE) {
       const guardrail = await checkHiredGuardrail(supabase, candidateId);
@@ -642,7 +641,7 @@ interface HiredGuardrailResult {
 }
 
 async function checkHiredGuardrail(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   candidateId: string,
 ): Promise<HiredGuardrailResult> {
   const { data, error } = await supabase
@@ -688,7 +687,7 @@ async function checkHiredGuardrail(
 export async function checkCandidateCompliance(
   candidateId: string,
 ): Promise<{ compliant: boolean; missing_items?: string[] }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase.rpc("check_candidate_compliance_status", {
     candidate_uuid: candidateId,
@@ -716,7 +715,7 @@ export async function uploadCandidateResume(
   candidateId: string,
   formData: FormData
 ): Promise<UploadResumeResult> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const adminSupabase = createAdminClient();
   const file = formData.get("file") as File | null;
   const authorName = (formData.get("authorName") as string) || "Recruiter";
@@ -820,7 +819,7 @@ export async function uploadCandidateResume(
 
 export async function deleteCandidateResume(candidateId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data: candidate } = await supabase
       .from("candidates")
@@ -861,7 +860,7 @@ export async function deleteCandidateResume(candidateId: string): Promise<{ succ
 
 export async function deleteCandidate(candidateId: string): Promise<void> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 1. Fetch candidate to check for stored resume file
     const { data: candidate } = await supabase
@@ -914,7 +913,7 @@ export async function setCandidateDNHStatus(
   dnhData: { dnh_flag: boolean; dnh_reason?: string; dnh_date?: string; dnh_recruiter?: string; }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { error } = await supabase
       .from("candidates")
@@ -947,7 +946,7 @@ export async function addCandidateNote(
   activityType: string = "Note"
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { error } = await supabase.from("activity_logs").insert({
       candidate_id: candidateId,
@@ -990,7 +989,7 @@ export async function updateCandidateProfile(
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const cleanData: any = { ...updateData };
     if (typeof cleanData.linkedin_url === 'string') {
@@ -1042,7 +1041,7 @@ export async function updateDuplicateCandidateResume(
   parsedData: ParsedCandidate,
   updatedBy?: string
 ): Promise<{ success: boolean; error?: string; candidate?: Candidate }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: candidateRecord, error: fetchError } = await supabase
     .from("candidates")
@@ -1135,7 +1134,7 @@ export async function reEvaluateCandidateFit(
   updatedBy?: string
 ): Promise<{ success: boolean; candidate?: Candidate; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 1. Fetch candidate with job details
     const { data: candidate, error: fetchError } = await supabase
@@ -1251,7 +1250,7 @@ export async function reEvaluateCandidateFit(
 
 export async function getCandidateById(candidateId: string): Promise<Candidate | null> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("candidates")
       .select("*, jobs(title)")
@@ -1294,7 +1293,7 @@ export async function bulkAddCandidates(
   candidatesData: BatchImportCandidateInput[]
 ): Promise<{ success: boolean; count: number; importedCandidates?: (Candidate & { queue_id?: string })[]; errors?: string[] }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const imported: (Candidate & { queue_id?: string })[] = [];
     const errors: string[] = [];
 
@@ -1484,7 +1483,7 @@ export async function bulkAddCandidates(
  */
 export async function getDspCandidates(): Promise<Candidate[]> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("candidates")
       .select("*, jobs(id, title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
@@ -1509,7 +1508,7 @@ export async function updateCandidateTemperature(
   temperature: 'hot' | 'warm' | 'cold' | null,
   recruiterName?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { error } = await supabase
     .from('candidates')
@@ -1541,7 +1540,7 @@ export async function transferCandidateJob(
   recruiterName?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 1. Get the target job to log its title
     const { data: targetJob, error: jobError } = await supabase

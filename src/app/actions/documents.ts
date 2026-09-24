@@ -1,13 +1,13 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { CandidateDocument, DocumentStatus } from "@/types/documents";
 
 export async function getCandidateDocuments(
   candidateId: string,
 ): Promise<CandidateDocument[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("candidate_documents")
@@ -28,7 +28,7 @@ export async function updateDocumentStatus(
   verifiedBy?: string,
   notes?: string,
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const updateData: Record<string, unknown> = { status };
 
@@ -89,7 +89,7 @@ export async function updateDocumentRecord(
   docId: string,
   payload: UpdateDocumentRecordPayload,
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: doc, error: fetchError } = await supabase
     .from("candidate_documents")
@@ -167,7 +167,7 @@ export async function updateDocumentRecord(
 export async function getExpiringDocuments(
   withinDays = 30,
 ): Promise<CandidateDocument[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() + withinDays);
@@ -191,7 +191,7 @@ export async function addDocumentRequirement(
   category?: string,
   requiresExpiration: boolean = false,
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { error } = await supabase.from("candidate_documents").insert({
     candidate_id: candidateId,
