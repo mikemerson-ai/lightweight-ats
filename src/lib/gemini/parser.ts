@@ -1,3 +1,7 @@
+if (typeof globalThis.DOMMatrix === "undefined") {
+  (globalThis as any).DOMMatrix = class DOMMatrix {};
+}
+
 import { GoogleGenAI, Type } from '@google/genai';
 import { extractZipCode } from '@/lib/geo/commute';
 
