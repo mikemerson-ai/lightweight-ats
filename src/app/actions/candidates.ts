@@ -533,21 +533,26 @@ export async function quickAddSourcedCandidate(
 }
 
 
-export async function getCandidatesByJob(jobId: string): Promise<Candidate[]> {
-  const supabase = createAdminClient();
+export async function getCandidatesByJob(jobId: string): Promise<{ data: Candidate[] | null; error: string | null }> {
+  try {
+    const supabase = createAdminClient();
 
-  const { data, error } = await supabase
-    .from("candidates")
-    .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
-    .eq("job_id", jobId)
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("candidates")
+      .select("*, jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Supabase Error in getCandidatesByJob:", error);
-    throw new Error(error.message);
+    if (error) {
+      console.error("Supabase Error in getCandidatesByJob:", error);
+      return { data: null, error: error.message };
+    }
+
+    return { data: (data as Candidate[]) ?? [], error: null };
+  } catch (err: any) {
+    console.error("Exception in getCandidatesByJob:", err);
+    return { data: null, error: err.message || "Unknown server error" };
   }
-
-  return (data as Candidate[]) ?? [];
 }
 
 export async function updateCandidateStage(

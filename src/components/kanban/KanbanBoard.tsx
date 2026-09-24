@@ -171,11 +171,17 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
 
   const loadCandidates = useCallback(async (targetId: string) => {
     try {
-      const data = await getCandidatesByJob(targetId);
-      setCandidates(data || []);
+      const response = await getCandidatesByJob(targetId);
+      if (response.error) {
+        toast.error(`Load candidates failed: ${response.error}`);
+        setCandidates([]);
+      } else {
+        setCandidates(response.data || []);
+      }
       setLoadedJobId(targetId);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error loading candidates in Kanban:", err);
+      toast.error(`Load candidates exception: ${err.message || 'Unknown error'}`);
       setCandidates([]);
       setLoadedJobId(targetId);
     }
