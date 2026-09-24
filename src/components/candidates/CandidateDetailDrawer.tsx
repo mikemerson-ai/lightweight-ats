@@ -18,7 +18,7 @@ import {
 } from "@/app/actions/candidates";
 import { getGroupHomes } from "@/app/actions/groupHomes";
 import type { GroupHome } from "@/types/groupHomes";
-import { SHIFT_OPTIONS, AVAILABILITY_DAYS_OPTIONS } from "@/types/groupHomes";
+import { SHIFT_OPTIONS, AVAILABILITY_DAYS_OPTIONS, DEFAULT_GROUP_HOMES } from "@/types/groupHomes";
 import { DspCommuteBreakdownWidget } from "@/components/candidates/DspCommuteBreakdownWidget";
 import { normalizeZipCode } from "@/lib/geo/commute";
 import {
@@ -276,7 +276,10 @@ export function CandidateDetailDrawer({
 }: CandidateDetailDrawerProps) {
   const [localCandidate, setLocalCandidate] = useState<Candidate | null>(candidate);
   const [isReEvaluating, setIsReEvaluating] = useState(false);
-  const [groupHomes, setGroupHomes] = useState<GroupHome[]>([]);
+  // Initialize with DEFAULT_GROUP_HOMES so proximity always works even if the
+  // server action is slow or fails (Vercel cold starts, network errors, etc.).
+  const [groupHomes, setGroupHomes] = useState<GroupHome[]>(DEFAULT_GROUP_HOMES);
+  const [isLoadingHomes, setIsLoadingHomes] = useState(false);
 
   useEffect(() => {
     setLocalCandidate(candidate);
@@ -284,9 +287,19 @@ export function CandidateDetailDrawer({
 
   useEffect(() => {
     if (candidate) {
+      setIsLoadingHomes(true);
       getGroupHomes()
-        .then(setGroupHomes)
-        .catch((err) => console.error("Failed to load group homes:", err));
+        .then((homes) => {
+          // Only replace defaults if we got a real (non-empty) result back
+          if (homes && homes.length > 0) {
+            setGroupHomes(homes);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load group homes, using hardcoded fallback:", err);
+          // groupHomes is already DEFAULT_GROUP_HOMES — nothing to do
+        })
+        .finally(() => setIsLoadingHomes(false));
     }
   }, [candidate?.id]);
 
@@ -1167,12 +1180,20 @@ export function CandidateDetailDrawer({
 
             {/* DSP Commute Breakdown Widget (Rendered for DSP candidates) */}
             {isDsp && (
-              <DspCommuteBreakdownWidget
-                candidate={activeCandidate || candidate}
-                groupHomes={groupHomes}
-                onUpdateZip={handleUpdateZip}
-                onToggleShift={handleToggleShift}
-              />
+              isLoadingHomes ? (
+                <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-4.5 shadow-2xs flex flex-col gap-3 animate-pulse">
+                  <div className="h-4 bg-sky-200/50 rounded w-1/3"></div>
+                  <div className="h-10 bg-sky-100/50 rounded w-full"></div>
+                  <div className="h-16 bg-white/50 rounded w-full mt-2"></div>
+                </div>
+              ) : (
+                <DspCommuteBreakdownWidget
+                  candidate={activeCandidate || candidate}
+                  groupHomes={groupHomes}
+                  onUpdateZip={handleUpdateZip}
+                  onToggleShift={handleToggleShift}
+                />
+              )
             )}
 
             {/* Candidate Resume Document Card */}

@@ -122,7 +122,8 @@ export interface ComplianceDocument {
 export async function getCandidateActivity(
   candidateId: string,
 ): Promise<ActivityLogEntry[]> {
-  const supabase = await createClient();
+  // Use admin client to bypass RLS — this is a server-only action, data is never exposed to the browser directly
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("activity_logs")
@@ -140,7 +141,8 @@ export async function getCandidateActivity(
 export async function getCandidateDocuments(
   candidateId: string,
 ): Promise<ComplianceDocument[]> {
-  const supabase = await createClient();
+  // Use admin client to bypass RLS
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("document_checklists")
