@@ -70,9 +70,30 @@ export async function parseResumeAction(formData: FormData): Promise<ParseResume
     };
   } catch (error: any) {
     console.error('Error parsing resume:', error);
+
+    let friendlyError = error?.message || 'An unexpected error occurred while parsing the resume';
+    try {
+      if (typeof friendlyError === 'string' && friendlyError.trim().startsWith('{')) {
+        const parsedJson = JSON.parse(friendlyError);
+        if (parsedJson?.error?.message) {
+          friendlyError = parsedJson.error.message;
+        }
+      }
+    } catch {
+      // Keep existing friendlyError
+    }
+
+    if (
+      friendlyError.includes('high demand') ||
+      friendlyError.includes('503') ||
+      friendlyError.includes('UNAVAILABLE')
+    ) {
+      friendlyError = 'The AI model is temporarily experiencing high demand. Please try again in a moment.';
+    }
+
     return {
       success: false,
-      error: error.message || 'An unexpected error occurred while parsing the resume'
+      error: friendlyError
     };
   }
 }

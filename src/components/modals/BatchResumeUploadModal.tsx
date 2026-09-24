@@ -691,7 +691,7 @@ export function BatchResumeUploadModal({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(parsedItems.length > 0 ? sortedParsedItems : queue).map((item, idx) => {
+                      {[...sortedParsedItems, ...queue.filter(q => q.status !== "done" && q.status !== "imported")].map((item, idx) => {
                         const parsed = item.parsedData;
                         const dup = duplicates[item.id];
 
@@ -767,6 +767,11 @@ export function BatchResumeUploadModal({
                                   <div className="text-[11px] text-slate-500 line-clamp-1 max-w-xs" title={parsed.fitSummary}>
                                     {parsed.fitSummary}
                                   </div>
+                                  {parsed.modelUsed && (
+                                    <div className="text-[10px] text-secondary bg-secondary/10 px-1.5 py-0.5 rounded-sm w-fit mt-1 border border-secondary/20 font-medium">
+                                      Parsed via: {parsed.modelUsed === "gemini-flash-latest" ? "Gemini 1.5 Flash" : parsed.modelUsed === "gemini-flash-lite-latest" ? "Gemini Flash Lite" : parsed.modelUsed === "google/gemma-3-27b-it:free" ? "Gemma 3 27B (OpenRouter)" : parsed.modelUsed}
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-1.5 text-slate-700">

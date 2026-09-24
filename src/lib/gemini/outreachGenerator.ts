@@ -191,19 +191,33 @@ EXECUTION WORKFLOW:
   };
 
   let response;
-  try {
-    response = await ai.models.generateContent({
-      model: "gemini-3.5-flash-lite",
-      contents: [prompt],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: 0.3,
-      },
-    });
-  } catch (error: any) {
-    console.error("Error generating outreach message:", error);
-    throw new Error(`Failed to generate outreach message: ${error.message || "Unknown error"}`);
+  const modelsToTry = [
+    "gemini-flash-lite-latest",
+    "gemini-flash-latest",
+  ];
+
+  let lastError: Error | null = null;
+  for (const model of modelsToTry) {
+    try {
+      response = await ai.models.generateContent({
+        model,
+        contents: [prompt],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          temperature: 0.3,
+        },
+      });
+      if (response?.text) break;
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`[Outreach] Model ${model} failed, trying next...`, error.message);
+    }
+  }
+
+  if (!response?.text) {
+    console.error("Error generating outreach message:", lastError);
+    throw new Error(`Failed to generate outreach message: ${lastError?.message || "Unknown error"}`);
   }
 
   const rawText = response?.text || "";

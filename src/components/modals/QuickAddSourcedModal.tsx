@@ -52,6 +52,7 @@ export function QuickAddSourcedModal({
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [modelUsed, setModelUsed] = useState("");
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
   const [duplicateInfo, setDuplicateInfo] = useState<{isDuplicate: boolean; sameJob: boolean; existingRecord?: any} | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -142,6 +143,7 @@ export function QuickAddSourcedModal({
     setDragging(false);
     setParsing(false);
     setError("");
+    setModelUsed("");
     setDuplicateInfo(null);
   }
 
@@ -179,6 +181,7 @@ export function QuickAddSourcedModal({
       .filter(Boolean)
       .join("\n\n");
     if (notes) setOutreachNotes(notes);
+    if (data.modelUsed) setModelUsed(data.modelUsed);
   }
 
   async function handleFile(file: File | undefined) {
@@ -625,7 +628,7 @@ export function QuickAddSourcedModal({
               <>
                 <Loader2 className="h-6 w-6 text-secondary animate-spin" />
                 <span className="font-medium text-primary">
-                  AI Parsing with Gemini 3.5 Flash Lite...
+                  AI Parsing Resume...
                 </span>
                 <span className="text-secondary/80">Extracting candidate details</span>
               </>
@@ -633,7 +636,14 @@ export function QuickAddSourcedModal({
               <>
                 <Upload className="h-6 w-6 text-secondary" />
                 {resume ? (
-                  <span className="font-medium text-primary">{resume.name}</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="font-medium text-primary">{resume.name}</span>
+                    {modelUsed && (
+                      <span className="text-xs text-secondary bg-secondary/10 px-2 py-0.5 rounded-md">
+                        Parsed via: {modelUsed === "gemini-flash-latest" ? "Gemini 1.5 Flash" : modelUsed === "gemini-flash-lite-latest" ? "Gemini Flash Lite" : modelUsed === "google/gemma-3-27b-it:free" ? "Gemma 3 27B (OpenRouter)" : modelUsed}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <span className="font-medium">
