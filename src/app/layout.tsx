@@ -21,6 +21,8 @@ export const metadata: Metadata = {
 import { RecruiterProvider } from "@/context/RecruiterContext";
 import { getRecruiters } from "@/app/actions/recruiters";
 
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: {
