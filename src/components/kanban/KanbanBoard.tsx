@@ -4,11 +4,10 @@ import { useEffect, useState, forwardRef, useImperativeHandle, useCallback } fro
 import { type DragEndEvent } from "@dnd-kit/core";
 import { Star, Sparkles, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import {
   updateCandidateStage,
   getCandidateById,
-  getCandidatesByJob,
+  getKanbanCandidates,
   type Candidate,
 } from "@/app/actions/candidates";
 import type { Job } from "@/app/actions/jobs";
@@ -68,6 +67,7 @@ export function getCandidateAiScorecard(candidate: Candidate) {
   return {
     recommendation,
     fitScore,
+    evaluationId: aiEval.id,
     rawNotes: aiEval.notes,
   };
 }
@@ -170,38 +170,18 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [scorecardCandidate, setScorecardCandidate] = useState<Candidate | null>(null);
 
-  const supabase = createClient();
   const loadCandidates = useCallback(async (targetId: string) => {
     try {
-      const COLUMNS = `
-        id, job_id, first_name, last_name, email, phone, primary_skills, source_channel, pipeline_stage, status_tag,
-        dnh_date, dnh_recruiter_name, dnh_reason, disqualification_reason, offer_status, created_at, updated_at, ai_summary,
-        years_of_experience, suggested_role_fit, contact_info, linkedin_url, pending_resume, source_type, date_applied,
-        date_sourced, sourcing_channel, outreach_notes, dnh_flag, dnh_recruiter, docusign_link, docusign_status, address,
-        fit_rating, work_experience, sub_scores, resume_url, resume_storage_path, zip_code, shift_preferences, temperature,
-        jobs(title), evaluations(id, candidate_id, reviewer_name, recommendation, aggregate_score, notes, created_at)
-      `.replace(/\s+/g, "");
-
-      const { data, error } = await supabase
-        .from("candidates")
-        .select(COLUMNS)
-        .eq("job_id", targetId)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        toast.error(`Load candidates failed: ${error.message}`);
-        setCandidates([]);
-      } else {
-        setCandidates((data as unknown as Candidate[]) || []);
-      }
+      const data = await getKanbanCandidates(targetId);
+      setCandidates(data);
       setLoadedJobId(targetId);
     } catch (err: any) {
       console.error("Error loading candidates in Kanban:", err);
-      toast.error(`Load candidates exception: ${err.message || 'Unknown error'}`);
+      toast.error(`Load candidates exception: ${err?.message || 'Unknown error'}`);
       setCandidates([]);
       setLoadedJobId(targetId);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     if (!jobId) {
@@ -463,6 +443,7 @@ export const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(function
         onClose={() => setScorecardCandidate(null)}
         candidate={scorecardCandidate}
         existingMarkdown={scorecardCandidate ? getCandidateAiScorecard(scorecardCandidate)?.rawNotes || null : null}
+        evaluationId={scorecardCandidate ? getCandidateAiScorecard(scorecardCandidate)?.evaluationId ?? null : null}
         onScorecardGenerated={async (_markdown, updatedCandidate) => {
           if (!scorecardCandidate) return;
           const [evs, freshCandidate] = await Promise.all([

@@ -663,7 +663,11 @@ export function QuickAddSourcedModal({
             />
           </div>
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5">
+              <p className="text-sm font-medium text-red-700">{error}</p>
+            </div>
+          )}
 
           {duplicateInfo?.isDuplicate && duplicateInfo.sameJob && duplicateInfo.existingRecord?.dnh_flag && (
             <div className="rounded-md bg-red-50 p-3 border border-red-200 text-sm text-red-800">

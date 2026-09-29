@@ -14,6 +14,7 @@ import {
   reEvaluateCandidateFit,
   uploadCandidateResume,
   getCandidateById,
+  getCandidateDetails,
   type ActivityLogEntry,
 } from "@/app/actions/candidates";
 import { getGroupHomes } from "@/app/actions/groupHomes";
@@ -281,9 +282,40 @@ export function CandidateDetailDrawer({
   const [groupHomes, setGroupHomes] = useState<GroupHome[]>(DEFAULT_GROUP_HOMES);
   const [isLoadingHomes, setIsLoadingHomes] = useState(false);
 
+  // Sync the lightweight board object into local state. When the same candidate
+  // is re-rendered (e.g. after a stage change), shallow-merge the incoming fields
+  // over the thick state so heavy fields (resume text, evaluations, work history)
+  // fetched below are never clobbered by the thin board payload.
   useEffect(() => {
-    setLocalCandidate(candidate);
+    if (!candidate) {
+      setLocalCandidate(null);
+      return;
+    }
+    setLocalCandidate((prev) => {
+      if (prev && prev.id === candidate.id) {
+        return { ...prev, ...candidate };
+      }
+      return candidate;
+    });
   }, [candidate]);
+
+  // Thick hydration: the board only ships lightweight fields to stay under the
+  // 1MB Server Action limit. Pull the full candidate (+ evaluations + job) here.
+  useEffect(() => {
+    if (!candidate?.id) return;
+    let cancelled = false;
+    getCandidateDetails(candidate.id)
+      .then((details) => {
+        if (cancelled || !details) return;
+        setLocalCandidate(details);
+      })
+      .catch((err) => {
+        console.error("Failed to load candidate details:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidate?.id]);
 
   useEffect(() => {
     if (candidate) {
@@ -1608,9 +1640,9 @@ export function CandidateDetailDrawer({
                 </div>
               ) : activeTab === "experience" ? (
                 <div className="mt-3 flex flex-col gap-4">
-                  {candidate.work_experience && candidate.work_experience.length > 0 ? (
+                  {activeCandidate?.work_experience && activeCandidate.work_experience.length > 0 ? (
                     <div className="relative border-l-2 border-slate-200 ml-3 pl-5 space-y-6">
-                      {candidate.work_experience.map((exp, idx) => (
+                      {activeCandidate.work_experience.map((exp, idx) => (
                         <div key={idx} className="relative">
                           <div className="absolute -left-[29px] top-1 h-3 w-3 rounded-full border-2 border-white bg-primary"></div>
                           <h4 className="text-sm font-semibold text-primary">{exp.jobTitle}</h4>

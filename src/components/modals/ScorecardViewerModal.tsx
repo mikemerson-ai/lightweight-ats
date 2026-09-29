@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { X, Copy, Check, Sparkles, Upload, Loader2, AlertCircle, ShieldAlert, CheckCircle2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { type Candidate, uploadCandidateResume } from "@/app/actions/candidates";
 import { generateCandidateScorecard } from "@/app/actions/generateScorecard";
+import { getEvaluationDetails } from "@/app/actions/evaluations";
 import { useRecruiter } from "@/context/RecruiterContext";
 
 interface ScorecardViewerModalProps {
@@ -12,6 +13,7 @@ interface ScorecardViewerModalProps {
   onClose: () => void;
   candidate: Candidate | null;
   existingMarkdown?: string | null;
+  evaluationId?: string | null;
   onScorecardGenerated?: (markdown: string, updatedCandidate?: Candidate) => void;
 }
 
@@ -20,10 +22,12 @@ export function ScorecardViewerModal({
   onClose,
   candidate,
   existingMarkdown,
+  evaluationId,
   onScorecardGenerated,
 }: ScorecardViewerModalProps) {
   const [markdown, setMarkdown] = useState<string>(existingMarkdown || "");
   const [loading, setLoading] = useState(false);
+  const [hydratedEvalId, setHydratedEvalId] = useState<string | null>(null);
   const [evaluatingFileName, setEvaluatingFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -37,6 +41,35 @@ export function ScorecardViewerModal({
   const [prevExistingMarkdown, setPrevExistingMarkdown] = useState<string | null | undefined>(existingMarkdown);
 
   const { activeRecruiter } = useRecruiter();
+
+  // Lazy hydration: the board ships only a thin evaluation slice (no markdown),
+  // so when the modal opens we fetch the heavy `notes` for this evaluation on
+  // demand. If the caller already supplied `existingMarkdown`, skip the round trip.
+  useEffect(() => {
+    if (!open || !evaluationId || existingMarkdown) {
+      return;
+    }
+    if (markdown || hydratedEvalId === evaluationId) {
+      return;
+    }
+    let cancelled = false;
+    getEvaluationDetails(evaluationId)
+      .then((details) => {
+        if (cancelled) return;
+        setMarkdown(details?.notes || "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to hydrate scorecard markdown:", err);
+        setError(err instanceof Error ? err.message : "Failed to load scorecard.");
+      })
+      .finally(() => {
+        if (!cancelled) setHydratedEvalId(evaluationId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, evaluationId, existingMarkdown, markdown, hydratedEvalId]);
 
   // Sync markdown if candidate changes or existingMarkdown changes externally
   if (candidate?.id !== prevCandidateId) {
@@ -55,6 +88,17 @@ export function ScorecardViewerModal({
   if (!open || !candidate) {
     return null;
   }
+
+  // Show the hydration skeleton only while we genuinely have nothing to render
+  // yet. Once notes arrive (or resolve to empty/null), `hydratedEvalId` is set and
+  // the skeleton clears so a null/empty notes payload falls through to the
+  // "no scorecard" state instead of hanging.
+  const hydrationPending =
+    !loading &&
+    !markdown &&
+    !!evaluationId &&
+    !existingMarkdown &&
+    hydratedEvalId !== evaluationId;
 
   // Parse key metrics from markdown
   const recMatch = markdown.match(/Match Recommendation:\s*\*?\*?\s*(STRONG PURSUE|CONDITIONAL SCREEN|DO NOT ADVANCE)/i);
@@ -520,6 +564,16 @@ export function ScorecardViewerModal({
                   ? "Parsing new resume evidence, checking hard gate requirements, and regenerating scorecard."
                   : "Deconstructing job hard gates, analyzing quantified impact, checking red flags, and drafting recruiter interview probes."}
               </p>
+            </div>
+          ) : hydrationPending ? (
+            <div className="space-y-4 animate-pulse" aria-busy="true" aria-live="polite">
+              <div className="h-24 rounded-xl border border-slate-200 bg-white" />
+              <div className="h-40 rounded-xl border border-slate-200 bg-white" />
+              <div className="h-32 rounded-xl border border-slate-200 bg-white" />
+              <div className="flex items-center justify-center gap-2 py-2 text-xs font-medium text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin text-secondary" />
+                <span>Loading scorecard…</span>
+              </div>
             </div>
           ) : markdown ? (
             viewMode === "rendered" ? (

@@ -104,13 +104,13 @@ function parseGeminiResponse(response: { text?: string } | undefined): RawScorec
   }
 }
 
-let cachedOpenRouterModel: string | null = null;
+let cachedOpenRouterModels: string[] | null = null;
 let lastOrFetch = 0;
 
-async function getDynamicOpenRouterFreeModel(): Promise<string> {
+export async function getDynamicOpenRouterFreeModels(): Promise<string[]> {
   const now = Date.now();
-  if (cachedOpenRouterModel && (now - lastOrFetch < 24 * 60 * 60 * 1000)) {
-    return cachedOpenRouterModel;
+  if (cachedOpenRouterModels && (now - lastOrFetch < 24 * 60 * 60 * 1000)) {
+    return cachedOpenRouterModels;
   }
   
   try {
@@ -127,21 +127,27 @@ async function getDynamicOpenRouterFreeModel(): Promise<string> {
       return !id.includes('code') && !id.includes('safety') && !id.includes('fin') && !id.includes('sante');
     });
 
-    // Sort by context length descending to get the most powerful/capable model
-    genericModels.sort((a: any, b: any) => (b.context_length || 0) - (a.context_length || 0));
+    // Sort by context length
+    genericModels.sort((a: any, b: any) => {
+      return (b.context_length || 0) - (a.context_length || 0);
+    });
     
-    if (genericModels.length > 0 && typeof genericModels[0].id === 'string') {
-      const selectedModel: string = genericModels[0].id;
-      cachedOpenRouterModel = selectedModel;
+    if (genericModels.length > 0) {
+      const selectedModels = genericModels.slice(0, 4).map((m: any) => m.id as string);
+      cachedOpenRouterModels = selectedModels;
       lastOrFetch = now;
-      console.log(`[Evaluator] Dynamically selected OpenRouter fallback model: ${cachedOpenRouterModel}`);
-      return selectedModel;
+      console.log(`[Evaluator] Dynamically selected OpenRouter fallback models: ${selectedModels.join(', ')}`);
+      return selectedModels;
     }
   } catch (err) {
     console.warn('[Evaluator] Failed to fetch dynamic OR model, falling back to default', err);
   }
   
-  return 'google/gemma-3-27b-it:free';
+  return [
+    'google/gemma-4-31b-it:free',
+    'qwen/qwen3.8-27b:free',
+    'nvidia/nemotron-3-super-120b-a12b:free'
+  ];
 }
 
 const OPENROUTER_STRICT_JSON_MANDATE =
@@ -180,18 +186,23 @@ function parseJsonFromModelOutput(rawContent: string): RawScorecard {
   }
 }
 
-async function buildOpenRouterUserContent(payload: File | string): Promise<string> {
+async function buildOpenRouterUserContent(payload: File | string): Promise<string | any[]> {
   if (typeof payload === 'string') {
     return payload;
   }
-  const isText = payload.type.startsWith('text/') || /\.(txt|md|csv)$/i.test(payload.name);
+  const mimeType = payload.type || 'application/pdf';
+  const isText = mimeType.startsWith('text/') || /\.(txt|md|csv)$/i.test(payload.name);
   if (isText) {
     return await payload.text();
   }
-  throw new Error(
-    'PDF text extraction failed and the OpenRouter fallback cannot process binary files. ' +
-    'Please upload a .docx or plain-text resume, or try again when Gemini is available.'
-  );
+  
+  const buffer = Buffer.from(await payload.arrayBuffer());
+  const fileBase64 = buffer.toString('base64');
+  
+  return [
+    { type: 'text', text: "Candidate Resume (Attached): Please evaluate the details from this document." },
+    { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } }
+  ];
 }
 
 async function generateViaOpenRouter(
@@ -205,6 +216,12 @@ async function generateViaOpenRouter(
   }
 
   const userContent = await buildOpenRouterUserContent(payload);
+  const contentPayload = Array.isArray(userContent) 
+    ? [
+        { type: 'text', text: `${OPENROUTER_JSON_INSTRUCTION}\n\n` },
+        ...userContent
+      ]
+    : `${OPENROUTER_JSON_INSTRUCTION}\n\nCandidate Resume:\n${userContent}`;
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -215,10 +232,10 @@ async function generateViaOpenRouter(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: await getDynamicOpenRouterFreeModel(),
+      models: await getDynamicOpenRouterFreeModels(),
       messages: [
         { role: 'system', content: `${systemInstructions}\n\n${OPENROUTER_STRICT_JSON_MANDATE}` },
-        { role: 'user', content: `${OPENROUTER_JSON_INSTRUCTION}\n\nCandidate Resume:\n${userContent}` },
+        { role: 'user', content: contentPayload },
       ],
       response_format: { type: 'json_object' },
       max_tokens: 4096,
@@ -437,6 +454,8 @@ SCORING CALIBRATION:
       } catch (fallbackErr: unknown) {
         const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
         console.error('[Evaluator] OpenRouter fallback also failed:', fallbackMsg);
+        const originalErrorMsg = lastError instanceof Error ? lastError.message : String(lastError);
+        throw new Error(`${originalErrorMsg} | OpenRouter Fallback Failed: ${fallbackMsg}`);
       }
     }
   }

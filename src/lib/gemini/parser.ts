@@ -1,5 +1,5 @@
 if (typeof globalThis.DOMMatrix === "undefined") {
-  (globalThis as any).DOMMatrix = class DOMMatrix {};
+  (globalThis as unknown as Record<string, unknown>).DOMMatrix = class DOMMatrix {};
 }
 
 import { GoogleGenAI, Type } from '@google/genai';
@@ -131,12 +131,10 @@ export function computeFitRating(subScores: SubScores): number {
   return Math.max(1, Math.min(5, Math.round(avg)));
 }
 
-const OPENROUTER_FREE_MODEL = 'google/gemma-3-27b-it:free';
-
-const OPENROUTER_STRICT_JSON_MANDATE =
+const STRICT_JSON_MANDATE =
   'Respond with raw JSON only matching the schema. Do not include markdown code fences, backticks, or any conversational text.';
 
-const OPENROUTER_PARSER_JSON_INSTRUCTION = `Return ONLY valid JSON (no markdown fences, no explanatory text) matching exactly this schema:
+const PARSER_JSON_INSTRUCTION = `Return ONLY valid JSON (no markdown fences, no explanatory text) matching exactly this schema:
 {
   "firstName": "string",
   "lastName": "string",
@@ -193,6 +191,7 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
     const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buffer });
     const data = await parser.getText();
+    await parser.destroy();
     return data.text?.trim() ?? '';
   } catch (error) {
     console.error('[Parser] pdf-parse error:', error);
@@ -200,14 +199,14 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
   }
 }
 
-function parseJsonFromOpenRouter(rawContent: string): RawIntakeOutput {
+function parseModelJson(rawContent: string): RawIntakeOutput {
   const text = rawContent.trim();
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
 
   if (start === -1 || end <= start) {
-    console.error('[Parser] OpenRouter Raw Output Failed to Parse (no braces):', rawContent);
-    throw new Error('Failed to parse resume: No JSON object found in OpenRouter response');
+    console.error('[Parser] AI Raw Output Failed to Parse (no braces):', rawContent);
+    throw new Error('Failed to parse resume: No JSON object found in AI response');
   }
 
   let jsonCandidate = text.slice(start, end + 1);
@@ -216,21 +215,21 @@ function parseJsonFromOpenRouter(rawContent: string): RawIntakeOutput {
   try {
     return JSON.parse(jsonCandidate) as RawIntakeOutput;
   } catch {
-    console.error('[Parser] OpenRouter Raw Output Failed to Parse (JSON syntax error):', rawContent);
-    throw new Error('Failed to parse resume: Invalid JSON response from OpenRouter');
+    console.error('[Parser] AI Raw Output Failed to Parse (JSON syntax error):', rawContent);
+    throw new Error('Failed to parse resume: Invalid JSON response from AI');
   }
 }
 
-interface OpenRouterMessage {
+interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
-async function buildOpenRouterMessages(
+async function buildResumeMessages(
   payload: File | string,
   jobDescriptionText: string
-): Promise<OpenRouterMessage[]> {
-  const systemContent = `${INTAKE_INSTRUCTIONS}\n\n${OPENROUTER_STRICT_JSON_MANDATE}`;
+): Promise<ChatMessage[]> {
+  const systemContent = `${INTAKE_INSTRUCTIONS}\n\n${STRICT_JSON_MANDATE}`;
   const zipRule =
     'ZIP CODE EXTRACTION RULE: Always extract the candidate\'s 5-digit U.S. postal ZIP code into the separate `zip_code` field, even if it is also present inside the main address string (e.g., "Philadelphia, PA 19124" or a dedicated ZIP/Postal Code line). If no ZIP code can be found anywhere, return an empty string.';
 
@@ -260,76 +259,30 @@ async function buildOpenRouterMessages(
       { role: 'system', content: systemContent },
       {
         role: 'user',
-        content: `${OPENROUTER_PARSER_JSON_INSTRUCTION}\n\n${jobDescriptionText}\n\n${zipRule}\n\nCandidate Resume:\n${resumeText}`,
+        content: `${PARSER_JSON_INSTRUCTION}\n\n${jobDescriptionText}\n\n${zipRule}\n\nCandidate Resume:\n${resumeText}`,
       },
     ];
   }
 
-  // If we couldn't extract text and have to rely on binary, OpenRouter's free models will fail 
-  // because they don't support multimodal (PDF) inputs.
+  if (fileBase64) {
+    return [
+      { role: 'system', content: systemContent },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `${PARSER_JSON_INSTRUCTION}\n\n${jobDescriptionText}\n\n${zipRule}\n\nCandidate Resume (Attached): Please parse the details from this document.` },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } }
+        ]
+      }
+    ];
+  }
+
+  // If we couldn't extract text and have to rely on binary, the DeepSeek
+  // text fallback cannot process multimodal (PDF) inputs.
   throw new Error(
-    'PDF text extraction failed and the OpenRouter fallback cannot process binary files. ' +
+    'PDF text extraction failed and the DeepSeek fallback cannot process binary files. ' +
     'Please upload a .docx or plain-text resume, or try again when Gemini is available.'
   );
-}
-
-async function generateWithOpenRouterFallback(
-  payload: File | string,
-  jobContext: JobContext,
-  originalError: unknown
-): Promise<RawIntakeOutput> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    console.warn('[Parser] OpenRouter fallback skipped: OPENROUTER_API_KEY is not set');
-    throw originalError;
-  }
-
-  const jobDescriptionText =
-    `Target Job Title: ${jobContext.title}\n` +
-    `Target Job Description: ${jobContext.description}\n` +
-    `Target Job Requirements: ${jobContext.requirements || ''}`;
-
-  console.log(`[Parser] Attempting fallback parsing via OpenRouter free endpoint...`);
-  const messages = await buildOpenRouterMessages(payload, jobDescriptionText);
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'http://localhost:3000',
-      'X-Title': 'Lightweight ATS',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_FREE_MODEL,
-      messages,
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-      max_tokens: 4096,
-    }),
-    signal: controller.signal,
-  });
-
-  clearTimeout(timeoutId);
-
-  if (!res.ok) {
-    const bodyText = await res.text();
-    console.warn(`[Parser] OpenRouter free endpoint returned HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
-    throw new Error(`OpenRouter free endpoint failed (${res.status}): ${bodyText.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content || typeof content !== 'string' || !content.trim()) {
-    throw new Error(`OpenRouter free endpoint returned empty content`);
-  }
-
-  const parsedJson = parseJsonFromOpenRouter(content);
-  console.log(`[Parser] Successfully parsed resume using OpenRouter free endpoint`);
-  return parsedJson;
 }
 
 export async function parseResumeData(payload: File | string, jobContext?: JobContext): Promise<ParsedCandidate> {
@@ -500,92 +453,203 @@ export async function parseResumeData(payload: File | string, jobContext?: JobCo
     }
   });
 
-  const isTransientError = (error: unknown): boolean => {
-    if (!error) return false;
+  const GEMINI_MODELS = [
+    'gemini-3.0-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash-lite',
+  ];
+
+  const extractHttpStatus = (error: unknown): number | undefined => {
+    if (!error) return undefined;
     const errObj = typeof error === 'object' ? (error as Record<string, unknown>) : null;
-    const status = errObj?.status || errObj?.code || errObj?.statusCode;
-    if (status === 503 || status === 429 || status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED') {
-      return true;
+    for (const key of ['status', 'statusCode', 'code']) {
+      const value = errObj?.[key];
+      if (typeof value === 'number') return value;
     }
     const msg = error instanceof Error ? error.message : String(error);
+    const match = msg.match(/\b(400|404|429|503)\b/);
+    return match ? Number(match[1]) : undefined;
+  };
+
+  const isRateLimitError = (error: unknown): boolean => {
+    if (!error) return false;
+    const errObj = typeof error === 'object' ? (error as Record<string, unknown>) : null;
+    const nested = errObj?.error as { code?: unknown } | undefined;
+    const message = error instanceof Error ? error.message : String(error);
     return (
-      msg.includes('503') ||
-      msg.includes('429') ||
-      msg.includes('high demand') ||
-      msg.includes('UNAVAILABLE') ||
-      msg.includes('RESOURCE_EXHAUSTED') ||
-      msg.includes('rate limit') ||
-      msg.includes('quota') ||
-      msg.includes('ECONNRESET') ||
-      msg.includes('ETIMEDOUT')
+      errObj?.status === 429 ||
+      errObj?.code === 429 ||
+      nested?.code === 429 ||
+      errObj?.status === 503 ||
+      message.includes('429') ||
+      message.includes('RESOURCE_EXHAUSTED') ||
+      message.includes('quota') ||
+      message.includes('503')
     );
   };
 
-  const generateWithRetry = async (model: string, maxRetries = 2, baseDelayMs = 800) => {
-    let attempt = 0;
-    while (true) {
-      try {
-        return await generateWithModel(model);
-      } catch (err: unknown) {
-        attempt++;
-        if (attempt > maxRetries || !isTransientError(err)) {
-          throw err;
-        }
-        const jitter = Math.floor(Math.random() * 400);
-        const delay = baseDelayMs * Math.pow(2, attempt - 1) + jitter;
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[Parser] Transient error on ${model} (attempt ${attempt}/${maxRetries}): ${msg}. Retrying in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
+  // Dynamically resolve any valid Flash model in case every hardcoded alias is deprecated.
+  const fetchDynamicFlashModel = async (): Promise<string | null> => {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return null;
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
+      );
+      if (!res.ok) {
+        console.warn(`[Parser] Dynamic Gemini model list failed (${res.status})`);
+        return null;
       }
+      const data = await res.json();
+      const models: Array<{ name?: string }> = data?.models ?? [];
+      const selectedModelName = models
+        .map((m) => m.name)
+        .filter((name): name is string => typeof name === 'string' && name.includes('flash'))
+        .sort((a, b) => a.length - b.length)[0];
+      if (selectedModelName) {
+        console.log('[Parser] Hardcoded models failed. Self-healing selected dynamic model:', selectedModelName);
+        return selectedModelName;
+      }
+    } catch (err) {
+      console.warn('[Parser] Error resolving dynamic Gemini Flash model:', err instanceof Error ? err.message : String(err));
+    }
+    return null;
+  };
+
+  const generateWithDeepSeek = async (): Promise<RawIntakeOutput> => {
+    if (!process.env.DEEPSEEK_API_KEY) {
+      console.error('[Parser Error] DEEPSEEK_API_KEY is undefined in process.env!');
+    }
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      throw new Error('DeepSeek fallback skipped: DEEPSEEK_API_KEY is not set');
+    }
+
+    const jobDescriptionText =
+      `Target Job Title: ${jobContext.title}\n` +
+      `Target Job Description: ${jobContext.description}\n` +
+      `Target Job Requirements: ${jobContext.requirements || ''}`;
+
+    console.log('[Parser] Entering DeepSeek Tier 2. Key exists:', Boolean(process.env.DEEPSEEK_API_KEY));
+
+    try {
+      const messages = await buildResumeMessages(payload, jobDescriptionText);
+
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages,
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+          max_tokens: 8192,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`[DeepSeek API Error] HTTP ${res.status}:`, errorText);
+        throw new Error(`DeepSeek API failed (${res.status}): ${errorText.slice(0, 300)}`);
+      }
+
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content || typeof content !== 'string' || !content.trim()) {
+        throw new Error('DeepSeek returned empty content');
+      }
+
+      return parseModelJson(content);
+    } catch (deepSeekErr: unknown) {
+      console.error('[Parser] DeepSeek request threw an error:', deepSeekErr);
+      throw deepSeekErr;
     }
   };
 
-  const modelsToTry = [
-    'gemini-flash-lite-latest',
-    'gemini-flash-latest'
-  ];
-
-  let response;
-  let lastError: Error | null = null;
+  let raw: RawIntakeOutput | undefined;
   let modelUsed = '';
 
-  for (const model of modelsToTry) {
+  const parseGeminiText = (text: string | undefined): RawIntakeOutput => {
+    if (!text) throw new Error('Failed to parse resume: No response text from Gemini');
     try {
-      response = await generateWithRetry(model, 1, 800);
-      if (response?.text) {
-        modelUsed = model;
-        break;
-      }
-    } catch (err: unknown) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      console.warn(`[Parser] Model ${model} failed. Trying next model...`, lastError.message);
+      return JSON.parse(text) as RawIntakeOutput;
+    } catch {
+      throw new Error('Failed to parse resume: Invalid JSON response');
     }
+  };
+
+  // === Tier 1: Gemini Flash-Lite with Self-Healing ===
+  let tier1Error: unknown = null;
+  let hitRateLimit = false;
+
+  try {
+    const geminiModels = [...GEMINI_MODELS];
+
+    for (const model of geminiModels) {
+      console.log('[Parser] Trying Gemini model:', model);
+      let response;
+      try {
+        response = await generateWithModel(model);
+        if (response?.text) {
+          raw = parseGeminiText(response.text);
+          modelUsed = model;
+          break;
+        }
+      } catch (err: unknown) {
+        const status = extractHttpStatus(err);
+        if (isRateLimitError(err)) {
+          console.warn(`[Parser] Quota/rate limit detected on ${model}. Instantly falling back to Tier 2 (DeepSeek)...`);
+          tier1Error = err;
+          hitRateLimit = true;
+          break;
+        }
+        if (status === 400 || status === 404) {
+          console.warn(`[Parser] Gemini model ${model} is unavailable (${status}). Trying next alias...`);
+          tier1Error = err;
+          continue;
+        }
+        tier1Error = err;
+      }
+    }
+
+    // All hardcoded aliases deprecated (400/404) — dynamically resolve a live Flash model.
+    if (!raw && !hitRateLimit) {
+      const dynamicModel = await fetchDynamicFlashModel();
+      if (dynamicModel) {
+        try {
+          const dynamicResponse = await generateWithModel(dynamicModel);
+          if (dynamicResponse?.text) {
+            raw = parseGeminiText(dynamicResponse.text);
+            modelUsed = dynamicModel;
+          }
+        } catch (err: unknown) {
+          const status = extractHttpStatus(err);
+          if (isRateLimitError(err)) {
+            console.warn(`[Parser] Dynamic Gemini model quota/rate limited (${status ?? 'unknown'}). Failing over to DeepSeek.`);
+            hitRateLimit = true;
+          }
+          tier1Error = err;
+        }
+      }
+    }
+  } catch (err: unknown) {
+    tier1Error = err;
   }
 
-  let raw: RawIntakeOutput;
-
-  if (!response?.text) {
-    const is503OrTransient = isTransientError(lastError) || String(lastError?.message || lastError).includes('503');
-    if (process.env.OPENROUTER_API_KEY && (is503OrTransient || !lastError)) {
-      console.warn(
-        `[Parser] Primary Gemini models failed (transient/503: ${lastError?.message || lastError}). Triggering OpenRouter fallback...`
-      );
-      try {
-        raw = await generateWithOpenRouterFallback(payload, jobContext, lastError);
-        modelUsed = OPENROUTER_FREE_MODEL;
-      } catch (fallbackErr: unknown) {
-        const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        console.error('[Parser] OpenRouter fallback also failed:', fallbackMsg);
-        throw lastError || (fallbackErr instanceof Error ? fallbackErr : new Error(fallbackMsg));
-      }
-    } else {
-      throw lastError || new Error("Failed to parse resume: No response text from Gemini");
-    }
-  } else {
+  // === Tier 2: Direct DeepSeek fallback ===
+  if (!raw) {
+    console.warn('[Parser] Gemini Tier 1 failed. Engaging DeepSeek Tier 2 backstop...');
     try {
-      raw = JSON.parse(response.text) as RawIntakeOutput;
-    } catch {
-      throw new Error("Failed to parse resume: Invalid JSON response");
+      raw = await generateWithDeepSeek();
+      modelUsed = 'deepseek-chat';
+    } catch (deepseekErr: unknown) {
+      const deepseekMsg = deepseekErr instanceof Error ? deepseekErr.message : String(deepseekErr);
+      console.error('[Parser] DeepSeek Tier 2 failed:', deepseekMsg);
+      const originalMsg = tier1Error instanceof Error ? tier1Error.message : String(tier1Error ?? '');
+      throw new Error(originalMsg ? `${originalMsg} | DeepSeek Failed: ${deepseekMsg}` : `DeepSeek Failed: ${deepseekMsg}`);
     }
   }
 

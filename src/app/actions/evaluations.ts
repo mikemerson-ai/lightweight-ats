@@ -33,6 +33,32 @@ export async function getEvaluationsByCandidate(
   return (data as Evaluation[]) ?? [];
 }
 
+/**
+ * Lazy, targeted fetch for a single evaluation's heavy markdown `notes`.
+ *
+ * The board only embeds a thin evaluation slice, so the ScorecardViewerModal
+ * hydrates the full markdown on demand when the user opens a scorecard. Only the
+ * `notes` payload is selected — never the whole row — so a single open stays
+ * tiny regardless of how large the scorecard markdown is.
+ */
+export async function getEvaluationDetails(
+  evaluationId: string,
+): Promise<{ id: string; notes: string | null } | null> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("evaluations")
+    .select("id, notes")
+    .eq("id", evaluationId)
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
 export async function submitEvaluation(
   input: SubmitEvaluationInput,
 ): Promise<Evaluation> {
