@@ -448,6 +448,9 @@ export function CandidateDetailDrawer({
       const updated = {
         ...activeCandidate,
         ...editForm,
+        email: editForm.email?.trim() || "",
+        phone: editForm.phone?.trim() || "",
+        linkedin_url: editForm.linkedin_url?.trim() || undefined,
         years_of_experience: editForm.years_of_experience ? Number(editForm.years_of_experience) : null,
         zip_code: editForm.zip_code?.trim() || null,
         shift_preferences: editForm.shift_preferences || [],
@@ -456,6 +459,7 @@ export function CandidateDetailDrawer({
       setLocalCandidate(updated);
       onCandidateUpdated?.(updated);
       setShowEditModal(false);
+      toast.success("Profile saved successfully");
     } catch (err: any) {
       toast.error("Failed to update profile: " + (err.message || "An unexpected error occurred"));
     } finally {

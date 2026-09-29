@@ -1041,16 +1041,18 @@ export async function updateCandidateProfile(
 
     const cleanData: any = { ...updateData };
     if (typeof cleanData.linkedin_url === 'string') {
-      cleanData.linkedin_url = cleanData.linkedin_url.trim();
+      cleanData.linkedin_url = cleanData.linkedin_url.trim() || null;
     }
     if (typeof cleanData.email === 'string') {
-      cleanData.email = ["not provided", "not available", "n/a"].includes(cleanData.email.trim().toLowerCase()) ? null : cleanData.email.trim();
+      const trimmed = cleanData.email.trim();
+      cleanData.email = (!trimmed || ["not provided", "not available", "n/a"].includes(trimmed.toLowerCase())) ? null : trimmed;
     }
     if (typeof cleanData.phone === 'string') {
-      cleanData.phone = ["not provided", "not available", "n/a"].includes(cleanData.phone.trim().toLowerCase()) ? null : cleanData.phone.trim();
+      const trimmed = cleanData.phone.trim();
+      cleanData.phone = (!trimmed || ["not provided", "not available", "n/a"].includes(trimmed.toLowerCase())) ? null : trimmed;
     }
     if (typeof cleanData.zip_code === 'string') {
-      cleanData.zip_code = cleanData.zip_code.trim();
+      cleanData.zip_code = cleanData.zip_code.trim() || null;
     }
 
     let { error } = await supabase
@@ -1071,6 +1073,9 @@ export async function updateCandidateProfile(
     }
 
     if (error) {
+      if (error.code === "23505" || error.message?.includes("idx_unique_candidate_per_job")) {
+        return { success: false, error: "A candidate with this email address already exists for this job opening." };
+      }
       return { success: false, error: error.message };
     }
 
@@ -1115,11 +1120,13 @@ export async function updateDuplicateCandidateResume(
 
   if (parsedData.firstName) updateData.first_name = parsedData.firstName;
   if (parsedData.lastName) updateData.last_name = parsedData.lastName;
-  if (parsedData.email) {
-    updateData.email = ["not provided", "not available", "n/a"].includes(parsedData.email.trim().toLowerCase()) ? null : parsedData.email.trim();
+  if (parsedData.email !== undefined) {
+    const trimmed = (parsedData.email || "").trim();
+    updateData.email = (!trimmed || ["not provided", "not available", "n/a"].includes(trimmed.toLowerCase())) ? null : trimmed;
   }
-  if (parsedData.phone) {
-    updateData.phone = ["not provided", "not available", "n/a"].includes(parsedData.phone.trim().toLowerCase()) ? null : parsedData.phone.trim();
+  if (parsedData.phone !== undefined) {
+    const trimmed = (parsedData.phone || "").trim();
+    updateData.phone = (!trimmed || ["not provided", "not available", "n/a"].includes(trimmed.toLowerCase())) ? null : trimmed;
   }
   if (parsedData.address) updateData.address = parsedData.address;
   if (parsedData.zip_code || parsedData.address) {
@@ -1679,6 +1686,9 @@ export async function transferCandidateJob(
       .eq('id', candidateId);
 
     if (updateError) {
+      if (updateError.code === "23505" || updateError.message?.includes("idx_unique_candidate_per_job")) {
+        return { success: false, error: "A candidate with this email address already exists in the target job opening." };
+      }
       return { success: false, error: updateError.message };
     }
 
